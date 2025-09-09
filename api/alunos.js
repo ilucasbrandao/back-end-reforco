@@ -13,4 +13,4 @@ app.use(express.json());
 // Usar "/" para evitar /api/alunos/alunos
 app.use("/", routeAlunos);
 
-export const handler = serverless(app);
+export default serverless(app);

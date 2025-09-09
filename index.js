@@ -12,6 +12,20 @@ app.use(express.json());
 // Rotas
 app.use("/alunos", routeAlunos);
 
+import { pool } from "./db.js"; // ou "../db.js" dependendo da estrutura
+
+app.get("/ping", async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    const [rows] = await conn.query("SELECT 1");
+    conn.release();
+    res.status(200).send("✅ Conexão com MySQL bem-sucedida!");
+  } catch (err) {
+    console.error("Erro na conexão:", err.message);
+    res.status(500).send("❌ Falha na conexão com o banco de dados.");
+  }
+});
+
 // NÃO USAR app.listen()
 // Exporta a função serverless
-export const handler = serverless(app);
+export default serverless(app);
