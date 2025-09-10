@@ -7,8 +7,6 @@ const table = "alunos";
 export const getStudentsAll = async (req, res) => {
   try {
     const alunos = await Model.getStudentsAll(table);
-
-    // Formatar datas
     const alunosFormatados = alunos.map((aluno) => ({
       ...aluno,
       dataNascimento: aluno.dataNascimento
@@ -24,11 +22,10 @@ export const getStudentsAll = async (req, res) => {
         ? moment(aluno.update_time).format("DD/MM/YYYY")
         : "",
     }));
-
     res.status(200).json(alunosFormatados);
   } catch (error) {
     console.error("❌ Erro ao listar alunos:", error.message);
-    return res.status(500).json({ error: "Erro ao buscar alunos" });
+    res.status(500).json({ error: "Erro ao buscar alunos" });
   }
 };
 
@@ -59,7 +56,7 @@ export const getStudentById = async (req, res) => {
     res.json(alunoFormatado);
   } catch (error) {
     console.error("❌ Erro ao buscar aluno:", error.message);
-    return res.status(500).json({ error: "Erro ao buscar aluno" });
+    res.status(500).json({ error: "Erro ao buscar aluno" });
   }
 };
 
