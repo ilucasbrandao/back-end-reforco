@@ -1,4 +1,5 @@
 import express from "express";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import dotenv from "dotenv";
 import cors from "cors";
 import serverless from "serverless-http";
