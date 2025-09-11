@@ -84,6 +84,17 @@ export const createStudent = async (req, res) => {
       ? moment(dataMatricula, "DD/MM/YYYY").toDate()
       : null;
 
+    const [existing] = await pool.query(
+      `SELECT * FROM alunos WHERE name = ? AND responsavel = ?`,
+      [name, responsavel]
+    );
+
+    if (existing.length > 0) {
+      return res
+        .status(409)
+        .json({ error: "Aluno já cadastrado com esse responsável." });
+    }
+
     const { insertId } = await Model.createStudent(
       table,
       [
@@ -108,7 +119,7 @@ export const createStudent = async (req, res) => {
       ]
     );
 
-    const newStudent = await Model.getStudentById(table, insertId);
+    const [newStudent] = await Model.getStudentById(table, insertId);
 
     const alunoFormatado = {
       ...newStudent,
@@ -133,5 +144,27 @@ export const createStudent = async (req, res) => {
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
     res.status(500).json({ error: "Erro ao inserir aluno no banco" });
+  }
+};
+
+// Deletar aluno
+export const deleteStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [existing] = await pool.query(`SELECT * FROM alunos WHERE id = ?`, [
+      id,
+    ]);
+
+    if (existing.length === 0) {
+      return res.status(404).json({ error: "Aluno não encontrado." });
+    }
+
+    await pool.query(`DELETE FROM alunos WHERE id = ?`, [id]);
+
+    res.status(200).json({ message: "Aluno deletado com sucesso." });
+  } catch (error) {
+    console.error("❌ Erro ao deletar aluno:", error.message);
+    res.status(500).json({ error: "Erro ao deletar aluno." });
   }
 };
