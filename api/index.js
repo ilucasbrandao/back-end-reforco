@@ -1,14 +1,14 @@
 import express from "express";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import dotenv from "dotenv";
 import cors from "cors";
-import serverless from "serverless-http";
-import routeAlunos from "../routes/students.js"; // 👈 sobe um nível
-import { pool } from "../db.js"; // 👈 sobe um nível
+import routeAlunos from "../routes/students.js";
+import { pool } from "../db.js";
 
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
 
@@ -26,4 +26,6 @@ app.get("/ping", async (req, res) => {
   }
 });
 
-export default serverless(app);
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+});

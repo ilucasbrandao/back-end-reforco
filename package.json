@@ -2,14 +2,14 @@
   "name": "back-end-reforco",
   "version": "1.0.0",
   "description": "Back-end do meu projeto para gerenciar o reforco escolar.",
-  "main": "index.js",
+  "main": "api/index.js",
   "type": "module",
   "engines": {
     "node": "22.x"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node --watch index.js"
+    "start": "node api/index.js"
   },
   "author": "Lucas Brandao",
   "license": "ISC",
