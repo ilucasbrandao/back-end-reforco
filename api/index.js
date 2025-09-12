@@ -2,8 +2,8 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import routeAlunos from "./routes/students.js"; // ajuste se necessário
-import { pool } from "./db.js"; // ajuste se necessário
+import routeAlunos from "../routes/students.js"; // ajuste se necessário
+import { pool } from "../db.js"; // ajuste se necessário
 
 dotenv.config();
 
