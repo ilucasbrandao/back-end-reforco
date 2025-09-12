@@ -1,27 +1,31 @@
+// index.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import routeAlunos from "../routes/students.js";
-import { pool } from "../db.js";
+import routeAlunos from "./routes/students.js"; // ajuste se necessário
+import { pool } from "./db.js"; // ajuste se necessário
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Configuração CORS: permite apenas seu frontend
 app.use(
   cors({
     origin: "https://sistema-escolar-juh.vercel.app",
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
   })
 );
 
+// Permite receber JSON
 app.use(express.json());
 
+// Rotas
 app.use("/alunos", routeAlunos);
 
+// Rota de teste de conexão com o banco
 app.get("/ping", async (req, res) => {
   try {
     const conn = await pool.getConnection();
@@ -34,6 +38,7 @@ app.get("/ping", async (req, res) => {
   }
 });
 
+// Inicia o servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
