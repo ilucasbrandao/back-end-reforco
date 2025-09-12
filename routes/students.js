@@ -10,6 +10,6 @@ const router = express.Router();
 
 router.get("/", getStudentsAll);
 router.get("/:id", getStudentById);
-router.post("/", createStudent);
+router.post("/", cadastrar);
 
 export default router;

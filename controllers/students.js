@@ -4,7 +4,7 @@ import pool from "../config/db.js";
 
 const table = "alunos";
 
-export const createStudent = async (req, res) => {
+export const cadastrar = async (req, res) => {
   try {
     const {
       name,

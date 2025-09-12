@@ -14,7 +14,7 @@ export const getStudentById = async (table, id) => {
 };
 
 // --------- ROTA POST ---------//
-export const createStudent = async (table, columns, values) => {
+export const cadastrar = async (table, columns, values) => {
   const cols = columns.join(", "); // nome das colunas separadas por ", "
   const placeholders = values.map(() => "?").join(", "); // usa "?" para cada valor
   const [result] = await pool.query(
