@@ -13,7 +13,10 @@ const PORT = process.env.PORT || 3000;
 // Configuração CORS: permite apenas seu frontend
 app.use(
   cors({
-    origin: "https://sistema-escolar-juh.vercel.app",
+    origin: [
+      "https://sistema-escolar-juh.vercel.app",
+      "https://sistema-escolar-juh.vercel.app/alunos",
+    ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
