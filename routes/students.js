@@ -3,7 +3,7 @@ import express from "express";
 import {
   getStudentsAll,
   getStudentById,
-  createStudent,
+  cadastrar,
 } from "../controllers/students.js";
 
 const router = express.Router();
