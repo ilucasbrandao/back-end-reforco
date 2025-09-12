@@ -1,6 +1,6 @@
 import * as Model from "../models/students.js";
 import moment from "moment";
-import pool from "../db.js";
+import { pool } from "../db.js";
 
 const table = "alunos";
 
