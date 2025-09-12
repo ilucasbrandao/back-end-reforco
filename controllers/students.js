@@ -1,69 +1,9 @@
 import * as Model from "../models/students.js";
 import moment from "moment";
+import pool from "../config/db.js";
 
 const table = "alunos";
 
-// Listar todos os alunos
-export const getStudentsAll = async (req, res) => {
-  try {
-    const alunos = await Model.getStudentsAll(table);
-
-    // Formatar datas
-    const alunosFormatados = alunos.map((aluno) => ({
-      ...aluno,
-      dataNascimento: aluno.dataNascimento
-        ? moment(aluno.dataNascimento).format("DD/MM/YYYY")
-        : "",
-      dataMatricula: aluno.dataMatricula
-        ? moment(aluno.dataMatricula).format("DD/MM/YYYY")
-        : "",
-      create_time: aluno.create_time
-        ? moment(aluno.create_time).format("DD/MM/YYYY")
-        : "",
-      update_time: aluno.update_time
-        ? moment(aluno.update_time).format("DD/MM/YYYY")
-        : "",
-    }));
-
-    res.status(200).json(alunosFormatados);
-  } catch (error) {
-    console.error("❌ Erro ao listar alunos:", error.message);
-    return res.status(500).json({ error: "Erro ao buscar alunos" });
-  }
-};
-
-// Buscar aluno por ID
-export const getStudentById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const aluno = await Model.getStudentById(table, id);
-    if (!aluno)
-      return res.status(404).json({ message: "Aluno não encontrado!" });
-
-    const alunoFormatado = {
-      ...aluno,
-      dataNascimento: aluno.dataNascimento
-        ? moment(aluno.dataNascimento).format("DD/MM/YYYY")
-        : "",
-      dataMatricula: aluno.dataMatricula
-        ? moment(aluno.dataMatricula).format("DD/MM/YYYY")
-        : "",
-      create_time: aluno.create_time
-        ? moment(aluno.create_time).format("DD/MM/YYYY")
-        : "",
-      update_time: aluno.update_time
-        ? moment(aluno.update_time).format("DD/MM/YYYY")
-        : "",
-    };
-
-    res.json(alunoFormatado);
-  } catch (error) {
-    console.error("❌ Erro ao buscar aluno:", error.message);
-    return res.status(500).json({ error: "Erro ao buscar aluno" });
-  }
-};
-
-// Criar aluno
 export const createStudent = async (req, res) => {
   try {
     const {
@@ -77,15 +17,38 @@ export const createStudent = async (req, res) => {
       situacao,
     } = req.body;
 
-    const nascimentoBD = dataNascimento
-      ? moment(dataNascimento, "DD/MM/YYYY").toDate()
-      : null;
-    const matriculaBD = dataMatricula
-      ? moment(dataMatricula, "DD/MM/YYYY").toDate()
-      : null;
+    const situacaoFinal = situacao || "ativo";
 
+    // Validação de campos obrigatórios
+    if (!name || !dataNascimento || !dataMatricula || !serie) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+    }
+
+    // Validação de formato e datas futuras
+    const hoje = moment().startOf("day");
+
+    const nascimentoBD = moment(dataNascimento, "YYYY-MM-DD");
+    const matriculaBD = moment(dataMatricula, "YYYY-MM-DD");
+
+    if (!nascimentoBD.isValid() || !matriculaBD.isValid()) {
+      return res.status(400).json({ error: "Formato de data inválido." });
+    }
+
+    if (nascimentoBD.isAfter(hoje)) {
+      return res
+        .status(400)
+        .json({ error: "Data de nascimento não pode ser futura." });
+    }
+
+    if (matriculaBD.isAfter(hoje)) {
+      return res
+        .status(400)
+        .json({ error: "Data de matrícula não pode ser futura." });
+    }
+
+    // Verificação de duplicidade
     const [existing] = await pool.query(
-      `SELECT * FROM alunos WHERE name = ? AND responsavel = ?`,
+      `SELECT * FROM alunos WHERE LOWER(name) = LOWER(?) AND LOWER(responsavel) = LOWER(?)`,
       [name, responsavel]
     );
 
@@ -95,6 +58,7 @@ export const createStudent = async (req, res) => {
         .json({ error: "Aluno já cadastrado com esse responsável." });
     }
 
+    // Inserção no banco
     const { insertId } = await Model.createStudent(
       table,
       [
@@ -109,18 +73,19 @@ export const createStudent = async (req, res) => {
       ],
       [
         name,
-        nascimentoBD,
+        nascimentoBD.toDate(),
         responsavel,
         telefone,
-        matriculaBD,
+        matriculaBD.toDate(),
         serie,
         observacao || "",
-        situacao,
+        situacaoFinal,
       ]
     );
 
     const [newStudent] = await Model.getStudentById(table, insertId);
 
+    // Formatação da resposta
     const alunoFormatado = {
       ...newStudent,
       dataNascimento: newStudent.dataNascimento
@@ -137,34 +102,24 @@ export const createStudent = async (req, res) => {
         : "",
     };
 
+    console.log("📦 Dados para inserção:", {
+      name,
+      nascimentoBD: nascimentoBD.toDate(),
+      responsavel,
+      telefone,
+      matriculaBD: matriculaBD.toDate(),
+      serie,
+      observacao,
+      situacaoFinal,
+    });
+
     res.status(201).json({
       message: "Aluno cadastrado com sucesso",
       student: alunoFormatado,
     });
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
+    console.error("📄 Stack:", error.stack);
     res.status(500).json({ error: "Erro ao inserir aluno no banco" });
-  }
-};
-
-// Deletar aluno
-export const deleteStudent = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const [existing] = await pool.query(`SELECT * FROM alunos WHERE id = ?`, [
-      id,
-    ]);
-
-    if (existing.length === 0) {
-      return res.status(404).json({ error: "Aluno não encontrado." });
-    }
-
-    await pool.query(`DELETE FROM alunos WHERE id = ?`, [id]);
-
-    res.status(200).json({ message: "Aluno deletado com sucesso." });
-  } catch (error) {
-    console.error("❌ Erro ao deletar aluno:", error.message);
-    res.status(500).json({ error: "Erro ao deletar aluno." });
   }
 };
