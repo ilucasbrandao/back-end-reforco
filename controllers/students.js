@@ -4,6 +4,7 @@ import { pool } from "../db.js";
 
 const table = "alunos";
 
+// ------------------ ROTA POST ------------------ //
 export const cadastrar = async (req, res) => {
   try {
     const {
@@ -121,5 +122,62 @@ export const cadastrar = async (req, res) => {
     console.error("❌ Erro ao inserir aluno:", error.message);
     console.error("📄 Stack:", error.stack);
     res.status(500).json({ error: "Erro ao inserir aluno no banco" });
+  }
+};
+
+// ------------------ ROTA GET ALL ------------------ //
+export const getStudentsAll = async (req, res) => {
+  try {
+    const students = await Model.getStudentsAll(table);
+    const formatted = students.map((s) => ({
+      ...s,
+      dataNascimento: s.dataNascimento
+        ? moment(s.dataNascimento).format("DD/MM/YYYY")
+        : "",
+      dataMatricula: s.dataMatricula
+        ? moment(s.dataMatricula).format("DD/MM/YYYY")
+        : "",
+      create_time: s.create_time
+        ? moment(s.create_time).format("DD/MM/YYYY")
+        : "",
+      update_time: s.update_time
+        ? moment(s.update_time).format("DD/MM/YYYY")
+        : "",
+    }));
+    res.status(200).json(formatted);
+  } catch (err) {
+    console.error("❌ Erro ao listar alunos:", err);
+    res.status(500).json({ error: "Erro ao listar alunos" });
+  }
+};
+
+// ------------------ ROTA GET BY ID ------------------ //
+export const getStudentById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const student = await Model.getStudentById(table, id);
+    if (!student)
+      return res.status(404).json({ error: "Aluno não encontrado" });
+
+    const formatted = {
+      ...student,
+      dataNascimento: student.dataNascimento
+        ? moment(student.dataNascimento).format("DD/MM/YYYY")
+        : "",
+      dataMatricula: student.dataMatricula
+        ? moment(student.dataMatricula).format("DD/MM/YYYY")
+        : "",
+      create_time: student.create_time
+        ? moment(student.create_time).format("DD/MM/YYYY")
+        : "",
+      update_time: student.update_time
+        ? moment(student.update_time).format("DD/MM/YYYY")
+        : "",
+    };
+
+    res.status(200).json(formatted);
+  } catch (err) {
+    console.error("❌ Erro ao buscar aluno:", err);
+    res.status(500).json({ error: "Erro ao buscar aluno" });
   }
 };
