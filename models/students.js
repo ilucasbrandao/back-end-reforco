@@ -10,9 +10,16 @@ export const getStudentById = async (table, id) => {
   return rows[0];
 };
 
+<<<<<<< HEAD
 export const createStudent = async (table, columns, values) => {
   const cols = columns.join(", ");
   const placeholders = values.map(() => "?").join(", ");
+=======
+// --------- ROTA POST ---------//
+export const cadastrar = async (table, columns, values) => {
+  const cols = columns.join(", "); // nome das colunas separadas por ", "
+  const placeholders = values.map(() => "?").join(", "); // usa "?" para cada valor
+>>>>>>> 27efdeb30957dab60549549ed33df3ac77295e63
   const [result] = await pool.query(
     `INSERT INTO ${table} (${cols}) VALUES (${placeholders})`,
     values

@@ -8,12 +8,18 @@
     "node": "22.x"
   },
   "scripts": {
+<<<<<<< HEAD
     "start": "node api/index.js",
     "dev": "nodemon api/index.js"
+=======
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node api/index.js"
+>>>>>>> 27efdeb30957dab60549549ed33df3ac77295e63
   },
   "author": "Lucas Brandao",
   "license": "ISC",
   "dependencies": {
+    "@vercel/speed-insights": "^1.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
