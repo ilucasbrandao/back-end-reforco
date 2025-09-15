@@ -1,25 +1,35 @@
-//Imports
+// Imports
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import routeAlunos from "../routes/students.js";
 import { pool } from "../db.js";
 
-//Config
+// Config
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares
 app.use(express.json());
-app.options("*", cors());
+
+// Configuração CORS
+const allowedOrigins = [
+  "https://sistema-escolar-juh.vercel.app", // produção (Vercel)
+  "http://localhost:5173", // desenvolvimento (Vite)
+];
+
 app.use(
   cors({
-    origin: ["https://sistema-escolar-juh.vercel.app"],
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    origin: allowedOrigins,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
+
+// Suporte ao preflight (OPTIONS)
+app.options("*", cors());
 
 // Rotas
 app.use("/alunos", routeAlunos);
@@ -41,4 +51,4 @@ app.get("/ping", async (req, res) => {
 });
 
 // Porta
-app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Servidor rodando na porta ${PORT}`));
