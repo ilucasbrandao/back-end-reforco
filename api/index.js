@@ -26,14 +26,16 @@ app.use("/alunos", routeAlunos);
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
   try {
-    const conn = await pool.getConnection();
-    await conn.query("SELECT 1");
-    conn.release();
-    res.json({ status: "ok", message: "Conexão com MySQL bem-sucedida!" });
-    res.status(200).send("✅ Conexão com MySQL bem-sucedida!");
+    await pool.query("SELECT 1");
+    res
+      .status(200)
+      .json({ status: "ok", message: "✅ Conexão com MySQL bem-sucedida!" });
   } catch (err) {
     console.error("Erro na conexão:", err.message);
-    res.status(500).send("❌ Falha na conexão com o banco de dados.");
+    res.status(500).json({
+      status: "error",
+      message: "❌ Falha na conexão com o banco de dados.",
+    });
   }
 });
 
