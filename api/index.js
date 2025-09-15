@@ -15,21 +15,34 @@ app.use(express.json());
 
 // Configuração CORS
 const allowedOrigins = [
-  "https://sistema-escolar-juh.vercel.app", // produção (Vercel)
-  "http://localhost:5173", // desenvolvimento (Vite)
+  "https://sistema-escolar-juh.vercel.app",
+  "https://sistema-escolar-git-main-ilucasbrandaos-projects.vercel.app",
+  "https://sistema-escolar-hnpllebk7-ilucasbrandaos-projects.vercel.app",
+  "http://localhost:5173", // para testes locais
 ];
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
-
 // Suporte ao preflight (OPTIONS)
-app.options("*", cors());
+// Preflight OPTIONS
+app.options("*", (req, res) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin);
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.sendStatus(204);
+});
 
 // Rotas
 app.use("/alunos", routeAlunos);
