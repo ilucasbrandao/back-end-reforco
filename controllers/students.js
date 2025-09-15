@@ -20,7 +20,7 @@ const formatDates = (aluno) => ({
     : "",
 });
 
-// Listar todos os alunos
+//? Listar todos os alunos
 export const listarAlunos = async (req, res) => {
   try {
     const alunos = await Model.getStudentsAll(table);
@@ -31,7 +31,7 @@ export const listarAlunos = async (req, res) => {
   }
 };
 
-// Buscar aluno por ID
+//? Buscar aluno por ID
 export const listarAlunosID = async (req, res) => {
   try {
     const { id } = req.params;
@@ -46,7 +46,7 @@ export const listarAlunosID = async (req, res) => {
   }
 };
 
-// Criar aluno
+//! Criar aluno
 export const cadastrar = async (req, res) => {
   try {
     const {
@@ -139,7 +139,7 @@ export const cadastrar = async (req, res) => {
   }
 };
 
-// Atualizar aluno
+//! Atualizar aluno
 export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -198,7 +198,7 @@ export const atualizar = async (req, res) => {
   }
 };
 
-// Deletar aluno
+//! Deletar aluno
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;

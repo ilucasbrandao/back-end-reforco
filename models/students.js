@@ -1,14 +1,16 @@
 import { pool } from "../db.js";
 
+//! LISTAR TODOS
 export const getStudentsAll = async (table) => {
   try {
-    const [rows] = await pool.query(`SELECT * FROM ${table} ORDER BY id DESC`);
+    const [rows] = await pool.query(`SELECT * FROM ${table} ORDER BY id ASC`);
     return rows;
   } catch (error) {
     throw new Error("Erro ao buscar todos os alunos: " + error.message);
   }
 };
 
+//! LISTAR SOMENTE POR ID
 export const getStudentById = async (table, id) => {
   try {
     const [rows] = await pool.query(`SELECT * FROM ${table} WHERE id = ?`, [
@@ -20,6 +22,7 @@ export const getStudentById = async (table, id) => {
   }
 };
 
+//! CRIAR
 export const createStudent = async (table, columns, values) => {
   try {
     const cols = columns.join(", ");
@@ -34,6 +37,7 @@ export const createStudent = async (table, columns, values) => {
   }
 };
 
+//! ATUALIZAR POR ID
 export const updateStudent = async (table, id, data) => {
   try {
     const columns = Object.keys(data).filter(
@@ -57,6 +61,7 @@ export const updateStudent = async (table, id, data) => {
   }
 };
 
+//! DELETAR POR ID
 export const deleteStudent = async (table, id) => {
   try {
     const [result] = await pool.query(`DELETE FROM ${table} WHERE id = ?`, [
