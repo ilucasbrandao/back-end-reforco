@@ -13,7 +13,10 @@ app.use(express.json());
 // CORS simples: permite qualquer domínio
 app.use(
   cors({
-    origin: "https://sistema-escolar-juh.vercel.app", // seu front no Vercel
+    origin: [
+      "https://sistema-escolar-juh.vercel.app", // produção
+      "http://localhost:5173",
+    ], // desenvolvimento
     credentials: true,
   })
 );
