@@ -35,7 +35,6 @@ app.use(
     credentials: true,
   })
 );
-// Suporte ao preflight (OPTIONS)
 // Preflight OPTIONS
 app.options("*", (req, res) => {
   res.header("Access-Control-Allow-Origin", req.headers.origin);
