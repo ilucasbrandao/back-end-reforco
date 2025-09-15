@@ -10,21 +10,29 @@ export const getStudentsAll = async (table) => {
 };
 
 export const getStudentById = async (table, id) => {
-  const [rows] = await pool.query(`SELECT * FROM ${table} WHERE id = ?`, [id]);
-  return rows; // Apenas retorne o array completo
+  try {
+    const [rows] = await pool.query(`SELECT * FROM ${table} WHERE id = ?`, [
+      id,
+    ]);
+    return rows;
+  } catch (error) {
+    throw new Error("Erro ao buscar aluno por ID: " + error.message);
+  }
 };
 
 export const createStudent = async (table, columns, values) => {
-  const cols = columns.join(", ");
-  const placeholders = values.map(() => "?").join(", ");
-  const [result] = await pool.query(
-    `INSERT INTO ${table} (${cols}) VALUES (${placeholders})`,
-    values
-  );
-  return await getStudentById(table, result.insertId); // reaproveitando a função que seleciona por ID
+  try {
+    const cols = columns.join(", ");
+    const placeholders = values.map(() => "?").join(", ");
+    const [result] = await pool.query(
+      `INSERT INTO ${table} (${cols}) VALUES (${placeholders})`,
+      values
+    );
+    return result;
+  } catch (error) {
+    throw new Error("Erro ao inserir aluno: " + error.message);
+  }
 };
-
-//tarefa de casa:  adicionar o TRY/CATCH para todas as funções
 
 export const updateStudent = async (table, id, data) => {
   try {
@@ -35,7 +43,7 @@ export const updateStudent = async (table, id, data) => {
     const setClause = columns.map((col) => `${col} = ?`).join(", ");
 
     if (columns.length === 0) {
-      return { affectedRows: 0 }; // Não há nada para atualizar
+      return { affectedRows: 0 };
     }
 
     const [result] = await pool.query(

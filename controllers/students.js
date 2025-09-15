@@ -4,12 +4,6 @@ import { pool } from "../db.js";
 
 const table = "alunos";
 
-// Função auxiliar para converter a data do formato DD/MM/YYYY para o formato ISO 8601
-// Essa é a melhor prática para armazenar no banco de dados
-const toISO = (date) => {
-  return moment(date, "DD/MM/YYYY").format("YYYY-MM-DD");
-};
-
 const formatDates = (aluno) => ({
   ...aluno,
   dataNascimento: aluno.dataNascimento
@@ -41,7 +35,7 @@ export const listarAlunos = async (req, res) => {
 export const listarAlunosID = async (req, res) => {
   try {
     const { id } = req.params;
-    const [aluno] = await Model.getStudentById(table, id); // padronizado como array
+    const [aluno] = await Model.getStudentById(table, id);
     if (!aluno)
       return res.status(404).json({ message: "Aluno não encontrado!" });
 
@@ -65,40 +59,43 @@ export const cadastrar = async (req, res) => {
       observacao,
       situacao,
     } = req.body;
-    const situacaoFinal = situacao || "ativo"; // Validação de campos obrigatórios
 
     if (!name || !dataNascimento || !dataMatricula || !serie || !responsavel) {
       return res.status(400).json({ error: "Campos obrigatórios ausentes." });
-    } // Validar e converter datas de entrada (DD/MM/YYYY)
+    }
 
     const nascimento = moment(dataNascimento, "DD/MM/YYYY");
     const matricula = moment(dataMatricula, "DD/MM/YYYY");
     const hoje = moment().startOf("day");
+
     if (!nascimento.isValid() || !matricula.isValid()) {
       return res
         .status(400)
         .json({ error: "Formato de data inválido. Use DD/MM/YYYY." });
     }
+
     if (nascimento.isAfter(hoje)) {
       return res
         .status(400)
         .json({ error: "Data de nascimento não pode ser futura." });
     }
+
     if (matricula.isAfter(hoje)) {
       return res
         .status(400)
         .json({ error: "Data de matrícula não pode ser futura." });
-    } // Verificação de duplicidade
+    }
 
     const [existing] = await pool.query(
       `SELECT * FROM alunos WHERE LOWER(name) = LOWER(?) AND LOWER(responsavel) = LOWER(?)`,
-      [name, responsavel]
+      [name.trim(), responsavel.trim()]
     );
+
     if (existing.length > 0) {
       return res
         .status(409)
         .json({ error: "Aluno já cadastrado com esse responsável." });
-    } // Inserção no banco
+    }
 
     const { insertId } = await Model.createStudent(
       table,
@@ -113,18 +110,24 @@ export const cadastrar = async (req, res) => {
         "situacao",
       ],
       [
-        name,
-        nascimento.toDate(), // Já está no formato correto para o banco
-        responsavel,
-        telefone,
-        matricula.toDate(), // Já está no formato correto para o banco
-        serie,
-        observacao || "",
-        situacaoFinal,
+        name.trim(),
+        nascimento.toDate(),
+        responsavel.trim(),
+        telefone?.trim() || "",
+        matricula.toDate(),
+        serie.trim(),
+        observacao?.trim() || "",
+        situacao?.trim() || "ativo",
       ]
     );
 
     const [newStudent] = await Model.getStudentById(table, insertId);
+
+    if (!newStudent) {
+      return res.status(500).json({
+        error: "Aluno foi inserido, mas não pôde ser recuperado",
+      });
+    }
 
     res.status(201).json({
       message: "Aluno cadastrado com sucesso",
@@ -132,10 +135,11 @@ export const cadastrar = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
-    res.status(500).json({ error: "Erro ao inserir aluno no banco" });
+    res.status(500).json({ error: error.message });
   }
 };
-// Atualizar aluno por ID
+
+// Atualizar aluno
 export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -155,7 +159,6 @@ export const atualizar = async (req, res) => {
       situacao,
     } = req.body;
 
-    // Converte e valida as datas de entrada
     const nascimento = dataNascimento
       ? moment(dataNascimento, "DD/MM/YYYY")
       : null;
@@ -172,7 +175,7 @@ export const atualizar = async (req, res) => {
         .json({ error: "Formato de data inválido. Use DD/MM/YYYY." });
     }
 
-    const updated = await Model.updateStudent(table, id, {
+    await Model.updateStudent(table, id, {
       name,
       dataNascimento: nascimento?.toDate(),
       responsavel,
@@ -195,7 +198,7 @@ export const atualizar = async (req, res) => {
   }
 };
 
-// Deletar aluno por ID
+// Deletar aluno
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;

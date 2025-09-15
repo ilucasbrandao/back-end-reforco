@@ -11,8 +11,12 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // CORS simples: permite qualquer domínio
-app.use(cors());
-
+app.use(
+  cors({
+    origin: "https://sistema-escolar-juh.vercel.app", // seu front no Vercel
+    credentials: true,
+  })
+);
 // Rotas
 app.use("/alunos", routeAlunos);
 
