@@ -11,6 +11,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middlewares
+app.use(express.json());
+app.options("*", cors());
 app.use(
   cors({
     origin: ["https://sistema-escolar-juh.vercel.app"],
@@ -18,7 +20,6 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
-app.use(express.json());
 
 // Rotas
 app.use("/alunos", routeAlunos);
