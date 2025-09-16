@@ -11,7 +11,7 @@ export const getResumoDashboard = async (req, res) => {
       [profAtivos],
     ] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) AS total FROM alunos WHERE data_matricula >= CURDATE() - INTERVAL 7 DAY`
+        `SELECT COUNT(*) AS total FROM alunos WHERE dataMatricula >= CURDATE() - INTERVAL 7 DAY`
       ),
       pool.query(
         `SELECT SUM(valor) AS total FROM financeiro WHERE tipo = 'entrada'`
