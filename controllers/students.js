@@ -60,20 +60,32 @@ export const cadastrar = async (req, res) => {
       situacao,
     } = req.body;
 
-    if (!name || !dataNascimento || !dataMatricula || !serie || !responsavel) {
-      return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+    // Sanitização básica
+    const nomeLimpo = name?.trim();
+    const responsavelLimpo = responsavel?.trim();
+    const serieLimpa = serie?.trim();
+    const telefoneLimpo = telefone?.trim() || "";
+    const observacaoLimpa = observacao?.trim() || "";
+    const situacaoLimpa = situacao?.trim() || "ativo";
+
+    const nascimento = moment(dataNascimento?.replace(/\s/g, ""), "DD/MM/YYYY");
+    const matricula = moment(dataMatricula?.replace(/\s/g, ""), "DD/MM/YYYY");
+    const hoje = moment();
+
+    // Validação de campos obrigatórios
+    if (
+      !nomeLimpo ||
+      !responsavelLimpo ||
+      !serieLimpa ||
+      !nascimento.isValid() ||
+      !matricula.isValid()
+    ) {
+      return res.status(400).json({
+        error: "Campos obrigatórios ausentes ou formato inválido.",
+      });
     }
 
-    const nascimento = moment(dataNascimento, "DD/MM/YYYY");
-    const matricula = moment(dataMatricula, "DD/MM/YYYY");
-    const hoje = moment().startOf("day");
-
-    if (!nascimento.isValid() || !matricula.isValid()) {
-      return res
-        .status(400)
-        .json({ error: "Formato de data inválido. Use DD/MM/YYYY." });
-    }
-
+    // Validação de datas
     if (nascimento.isAfter(hoje)) {
       return res
         .status(400)
@@ -86,9 +98,10 @@ export const cadastrar = async (req, res) => {
         .json({ error: "Data de matrícula não pode ser futura." });
     }
 
+    // Verificação de duplicidade
     const [existing] = await pool.query(
       `SELECT * FROM alunos WHERE LOWER(name) = LOWER(?) AND LOWER(responsavel) = LOWER(?)`,
-      [name.trim(), responsavel.trim()]
+      [nomeLimpo, responsavelLimpo]
     );
 
     if (existing.length > 0) {
@@ -97,6 +110,7 @@ export const cadastrar = async (req, res) => {
         .json({ error: "Aluno já cadastrado com esse responsável." });
     }
 
+    // Inserção no banco
     const { insertId } = await Model.createStudent(
       table,
       [
@@ -110,14 +124,14 @@ export const cadastrar = async (req, res) => {
         "situacao",
       ],
       [
-        name.trim(),
+        nomeLimpo,
         nascimento.toDate(),
-        responsavel.trim(),
-        telefone?.trim() || "",
+        responsavelLimpo,
+        telefoneLimpo,
         matricula.toDate(),
-        serie.trim(),
-        observacao?.trim() || "",
-        situacao?.trim() || "ativo",
+        serieLimpa,
+        observacaoLimpa,
+        situacaoLimpa,
       ]
     );
 
@@ -125,17 +139,17 @@ export const cadastrar = async (req, res) => {
 
     if (!newStudent) {
       return res.status(500).json({
-        error: "Aluno foi inserido, mas não pôde ser recuperado",
+        error: "Aluno foi inserido, mas não pôde ser recuperado.",
       });
     }
 
     res.status(201).json({
-      message: "Aluno cadastrado com sucesso",
+      message: "Aluno cadastrado com sucesso.",
       student: formatDates(newStudent),
     });
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
   }
 };
 
