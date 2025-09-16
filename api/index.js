@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import routeAlunos from "../routes/students.js";
+import routeDashboard from "../routes/dashboard.js";
 import { pool } from "../db.js";
 
 dotenv.config();
@@ -22,6 +23,7 @@ app.use(
 );
 // Rotas
 app.use("/alunos", routeAlunos);
+app.use("/dashboard", routeDashboard);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {

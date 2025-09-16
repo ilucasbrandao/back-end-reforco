@@ -9,6 +9,7 @@ import {
 
 const router = express.Router();
 
+//? ROTAS ALUNOS
 router.get("/", listarAlunos); // Rota para listar todos os alunos (GET)
 router.post("/", cadastrar); // Rota para criar (POST)
 router.get("/:id", listarAlunosID); //Rota para listar por ID (GET)
