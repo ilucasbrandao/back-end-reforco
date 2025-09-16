@@ -1,3 +1,5 @@
+import { pool } from "../db.js";
+
 export const getResumoDashboard = async (req, res) => {
   try {
     const [
