@@ -1,24 +1,7 @@
 import * as Model from "../models/students.js";
-import moment from "moment";
 import { pool } from "../db.js";
 
 const table = "alunos";
-
-const formatDates = (aluno) => ({
-  ...aluno,
-  dataNascimento: aluno.dataNascimento
-    ? moment(aluno.dataNascimento).format("DD/MM/YYYY")
-    : "",
-  dataMatricula: aluno.dataMatricula
-    ? moment(aluno.dataMatricula).format("DD/MM/YYYY")
-    : "",
-  create_time: aluno.create_time
-    ? moment(aluno.create_time).format("DD/MM/YYYY")
-    : "",
-  update_time: aluno.update_time
-    ? moment(aluno.update_time).format("DD/MM/YYYY")
-    : "",
-});
 
 //? Listar todos os alunos
 export const listarAlunos = async (req, res) => {
@@ -46,7 +29,7 @@ export const listarAlunosID = async (req, res) => {
   }
 };
 
-//! Criar aluno
+//! Criar aluno - back cru, sem validação
 export const cadastrar = async (req, res) => {
   try {
     const {
@@ -60,57 +43,7 @@ export const cadastrar = async (req, res) => {
       situacao,
     } = req.body;
 
-    // Sanitização básica
-    const nomeLimpo = name?.trim();
-    const responsavelLimpo = responsavel?.trim();
-    const serieLimpa = serie?.trim();
-    const telefoneLimpo = telefone?.trim() || "";
-    const observacaoLimpa = observacao?.trim() || "";
-    const situacaoLimpa = situacao?.trim() || "ativo";
-
-    const nascimento = moment(dataNascimento?.replace(/\s/g, ""), "DD/MM/YYYY");
-    const matricula = moment(dataMatricula?.replace(/\s/g, ""), "DD/MM/YYYY");
-    const hoje = moment();
-
-    // Validação de campos obrigatórios
-    if (
-      !nomeLimpo ||
-      !responsavelLimpo ||
-      !serieLimpa ||
-      !nascimento.isValid() ||
-      !matricula.isValid()
-    ) {
-      return res.status(400).json({
-        error: "Campos obrigatórios ausentes ou formato inválido.",
-      });
-    }
-
-    // Validação de datas
-    if (nascimento.isAfter(hoje)) {
-      return res
-        .status(400)
-        .json({ error: "Data de nascimento não pode ser futura." });
-    }
-
-    if (matricula.isAfter(hoje)) {
-      return res
-        .status(400)
-        .json({ error: "Data de matrícula não pode ser futura." });
-    }
-
-    // Verificação de duplicidade
-    const [existing] = await pool.query(
-      `SELECT * FROM alunos WHERE LOWER(name) = LOWER(?) AND LOWER(responsavel) = LOWER(?)`,
-      [nomeLimpo, responsavelLimpo]
-    );
-
-    if (existing.length > 0) {
-      return res
-        .status(409)
-        .json({ error: "Aluno já cadastrado com esse responsável." });
-    }
-
-    // Inserção no banco
+    // Inserção direta, sem validação
     const { insertId } = await Model.createStudent(
       table,
       [
@@ -124,36 +57,29 @@ export const cadastrar = async (req, res) => {
         "situacao",
       ],
       [
-        nomeLimpo,
-        nascimento.toDate(),
-        responsavelLimpo,
-        telefoneLimpo,
-        matricula.toDate(),
-        serieLimpa,
-        observacaoLimpa,
-        situacaoLimpa,
+        name,
+        dataNascimento,
+        responsavel,
+        telefone,
+        dataMatricula,
+        serie,
+        observacao,
+        situacao,
       ]
     );
 
     const [newStudent] = await Model.getStudentById(table, insertId);
 
-    if (!newStudent) {
-      return res.status(500).json({
-        error: "Aluno foi inserido, mas não pôde ser recuperado.",
-      });
-    }
-
-    res.status(201).json({
-      message: "Aluno cadastrado com sucesso.",
-      student: formatDates(newStudent),
-    });
+    res
+      .status(201)
+      .json({ message: "Aluno cadastrado com sucesso.", student: newStudent });
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
     res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
   }
 };
 
-//! Atualizar aluno
+//! Atualizar aluno - back cru, sem validação
 export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -173,38 +99,23 @@ export const atualizar = async (req, res) => {
       situacao,
     } = req.body;
 
-    const nascimento = dataNascimento
-      ? moment(dataNascimento, "DD/MM/YYYY")
-      : null;
-    const matricula = dataMatricula
-      ? moment(dataMatricula, "DD/MM/YYYY")
-      : null;
-
-    if (
-      (nascimento && !nascimento.isValid()) ||
-      (matricula && !matricula.isValid())
-    ) {
-      return res
-        .status(400)
-        .json({ error: "Formato de data inválido. Use DD/MM/YYYY." });
-    }
-
+    // Atualização direta sem conversão ou validação
     await Model.updateStudent(table, id, {
-      name,
-      dataNascimento: nascimento?.toDate(),
-      responsavel,
-      telefone,
-      dataMatricula: matricula?.toDate(),
-      serie,
-      observacao,
-      situacao,
+      name: name?.trim() || "",
+      dataNascimento: dataNascimento || "",
+      responsavel: responsavel?.trim() || "",
+      telefone: telefone || "",
+      dataMatricula: dataMatricula || "",
+      serie: serie?.trim() || "",
+      observacao: observacao || "",
+      situacao: situacao?.trim() || "ativo",
     });
 
     const [alunoAtualizado] = await Model.getStudentById(table, id);
 
     res.status(200).json({
       message: "Aluno atualizado com sucesso",
-      student: formatDates(alunoAtualizado),
+      student: alunoAtualizado,
     });
   } catch (error) {
     console.error("❌ Erro ao atualizar aluno:", error.message);
