@@ -11,7 +11,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// CORS simples: permite qualquer domínio
 app.use(
   cors({
     origin: [
@@ -31,7 +30,10 @@ app.get("/ping", async (req, res) => {
     await pool.query("SELECT 1");
     res
       .status(200)
-      .json({ status: "ok", message: "✅ Conexão com MySQL bem-sucedida!" });
+      .json({
+        status: "ok",
+        message: "✅ Conexão com PostgreSQL bem-sucedida!",
+      });
   } catch (err) {
     console.error("Erro na conexão:", err.message);
     res.status(500).json({

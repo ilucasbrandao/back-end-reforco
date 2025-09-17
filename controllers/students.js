@@ -1,7 +1,17 @@
 import * as Model from "../models/students.js";
-import { pool } from "../db.js";
-
 const table = "alunos";
+
+// Utilitário simples para formatar datas (opcional)
+const formatDates = (aluno) => {
+  if (!aluno) return aluno;
+  return {
+    ...aluno,
+    dataNascimento: aluno.dataNascimento?.toISOString().split("T")[0],
+    dataMatricula: aluno.dataMatricula?.toISOString().split("T")[0],
+    criado_em: aluno.criado_em?.toISOString(),
+    atualizado_em: aluno.atualizado_em?.toISOString(),
+  };
+};
 
 //? Listar todos os alunos
 export const listarAlunos = async (req, res) => {
@@ -18,11 +28,11 @@ export const listarAlunos = async (req, res) => {
 export const listarAlunosID = async (req, res) => {
   try {
     const { id } = req.params;
-    const [aluno] = await Model.getStudentById(table, id);
-    if (!aluno)
+    const aluno = await Model.getStudentById(table, id);
+    if (!aluno || aluno.length === 0)
       return res.status(404).json({ message: "Aluno não encontrado!" });
 
-    res.json(formatDates(aluno));
+    res.json(formatDates(aluno[0]));
   } catch (error) {
     console.error("❌ Erro ao buscar aluno:", error.message);
     res.status(500).json({ error: "Erro ao buscar aluno" });
@@ -33,46 +43,44 @@ export const listarAlunosID = async (req, res) => {
 export const cadastrar = async (req, res) => {
   try {
     const {
-      name,
-      dataNascimento,
+      nome,
+      data_nascimento,
       responsavel,
       telefone,
-      dataMatricula,
+      data_matricula,
       serie,
       observacao,
-      situacao,
+      status,
     } = req.body;
 
-    // Inserção direta, sem validação
-    const { insertId } = await Model.createStudent(
+    const newStudent = await Model.createStudent(
       table,
       [
-        "name",
-        "dataNascimento",
+        "nome",
+        "data_nascimento",
         "responsavel",
         "telefone",
-        "dataMatricula",
+        "data_matricula",
         "serie",
         "observacao",
-        "situacao",
+        "status",
       ],
       [
-        name,
-        dataNascimento,
+        nome,
+        data_nascimento,
         responsavel,
         telefone,
-        dataMatricula,
+        data_matricula,
         serie,
         observacao,
-        situacao,
+        status,
       ]
     );
 
-    const [newStudent] = await Model.getStudentById(table, insertId);
-
-    res
-      .status(201)
-      .json({ message: "Aluno cadastrado com sucesso.", student: newStudent });
+    res.status(201).json({
+      message: "Aluno cadastrado com sucesso.",
+      student: formatDates(newStudent),
+    });
   } catch (error) {
     console.error("❌ Erro ao inserir aluno:", error.message);
     res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
@@ -83,8 +91,8 @@ export const cadastrar = async (req, res) => {
 export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
-    const [alunoExistente] = await Model.getStudentById(table, id);
-    if (!alunoExistente) {
+    const alunoExistente = await Model.getStudentById(table, id);
+    if (!alunoExistente || alunoExistente.length === 0) {
       return res.status(404).json({ message: "Aluno não encontrado." });
     }
 
@@ -99,8 +107,7 @@ export const atualizar = async (req, res) => {
       situacao,
     } = req.body;
 
-    // Atualização direta sem conversão ou validação
-    await Model.updateStudent(table, id, {
+    const alunoAtualizado = await Model.updateStudent(table, id, {
       name: name?.trim() || "",
       dataNascimento: dataNascimento || "",
       responsavel: responsavel?.trim() || "",
@@ -111,11 +118,9 @@ export const atualizar = async (req, res) => {
       situacao: situacao?.trim() || "ativo",
     });
 
-    const [alunoAtualizado] = await Model.getStudentById(table, id);
-
     res.status(200).json({
       message: "Aluno atualizado com sucesso",
-      student: alunoAtualizado,
+      student: formatDates(alunoAtualizado),
     });
   } catch (error) {
     console.error("❌ Erro ao atualizar aluno:", error.message);
@@ -127,15 +132,18 @@ export const atualizar = async (req, res) => {
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await Model.deleteStudent(table, id);
+    const alunoDeletado = await Model.deleteStudent(table, id);
 
-    if (result.affectedRows === 0) {
+    if (!alunoDeletado) {
       return res
         .status(404)
         .json({ message: "Aluno não encontrado para exclusão." });
     }
 
-    res.status(200).json({ message: "Aluno deletado com sucesso" });
+    res.status(200).json({
+      message: "Aluno deletado com sucesso",
+      student: formatDates(alunoDeletado),
+    });
   } catch (error) {
     console.error("❌ Erro ao deletar aluno:", error.message);
     res.status(500).json({ error: "Erro ao deletar aluno no banco" });

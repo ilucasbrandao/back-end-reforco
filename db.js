@@ -1,28 +1,14 @@
-import mysql from "mysql2/promise";
+import pkg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-export const pool = mysql.createPool({
+const { Pool } = pkg;
+
+export const pool = new Pool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
-  port: parseInt(process.env.DB_PORT, 10), // ✅ Corrigido
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+  port: process.env.DB_PORT,
 });
-
-/*
-(async () => {
-  try {
-    const connection = await pool.getConnection();
-    connection.release();
-  } catch (err) {
-    console.error("❌ Erro ao conectar ao MySQL:");
-    console.error("Code:", err.code);
-    console.error("Message:", err.message);
-  }
-})();
-*/
