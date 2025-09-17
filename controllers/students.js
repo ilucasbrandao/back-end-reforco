@@ -97,25 +97,25 @@ export const atualizar = async (req, res) => {
     }
 
     const {
-      name,
-      dataNascimento,
+      nome,
+      data_nascimento,
       responsavel,
       telefone,
-      dataMatricula,
+      data_matricula,
       serie,
       observacao,
-      situacao,
+      status,
     } = req.body;
 
     const alunoAtualizado = await Model.updateStudent(table, id, {
-      name: name?.trim() || "",
-      dataNascimento: dataNascimento || "",
+      nome: nome?.trim() || "",
+      data_nascimento: data_nascimento || "",
       responsavel: responsavel?.trim() || "",
       telefone: telefone || "",
-      dataMatricula: dataMatricula || "",
+      data_matricula: data_matricula || "",
       serie: serie?.trim() || "",
       observacao: observacao || "",
-      situacao: situacao?.trim() || "ativo",
+      status: status?.trim() || "ativo",
     });
 
     res.status(200).json({

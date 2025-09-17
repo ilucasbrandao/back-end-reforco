@@ -2,7 +2,6 @@ import pkg from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
-
 const { Pool } = pkg;
 
 export const pool = new Pool({
@@ -11,4 +10,7 @@ export const pool = new Pool({
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
+  ssl: false,
 });
+
+console.log("DB_PASS:", process.env.DB_PASS ? "definido" : "undefined");

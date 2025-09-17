@@ -28,12 +28,10 @@ app.use("/dashboard", routeDashboard);
 app.get("/ping", async (req, res) => {
   try {
     await pool.query("SELECT 1");
-    res
-      .status(200)
-      .json({
-        status: "ok",
-        message: "✅ Conexão com PostgreSQL bem-sucedida!",
-      });
+    res.status(200).json({
+      status: "ok",
+      message: "✅ Conexão com PostgreSQL bem-sucedida!",
+    });
   } catch (err) {
     console.error("Erro na conexão:", err.message);
     res.status(500).json({
