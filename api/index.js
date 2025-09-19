@@ -1,10 +1,9 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import lancamentosRoutes from "../routes/lancamentos.js";
 import routeAlunos from "../routes/students.js";
 import routeProfessores from "../routes/teachers.js";
-import routeDashboard from "../routes/dashboard.js";
+import routeLancamentos from "../routes/lancamentos.js";
 import { pool } from "../db.js";
 
 dotenv.config();
@@ -17,28 +16,16 @@ app.use(
   cors({
     origin: [
       "https://sistema-escolar-juh.vercel.app", // produção
-      "http://localhost:5173",
-    ], // desenvolvimento
+      "http://localhost:5173", // desenvolvimento
+    ],
     credentials: true,
   })
 );
-// Rotas
+
+// Rotas principais
 app.use("/alunos", routeAlunos);
 app.use("/professores", routeProfessores);
-app.use("/lancamentos", lancamentosRoutes);
-app.use("/dashboard", routeDashboard);
-app.patch("/lancamentos/:id/baixar", async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await db.query(
-      "UPDATE lancamentos SET status = 'finalizado', data_pagamento = NOW() WHERE id = $1 RETURNING *",
-      [id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.use("/lancamentos", routeLancamentos);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
