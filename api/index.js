@@ -16,12 +16,13 @@ app.use(
   cors({
     origin: [
       "https://sistema-escolar-juh.vercel.app", // produção
-      "http://localhost:5173",
-    ], // desenvolvimento
+      "http://localhost:5173", // desenvolvimento
+    ],
     credentials: true,
   })
 );
-// Rotas
+
+// Rotas principais
 app.use("/alunos", routeAlunos);
 app.use("/professores", routeProfessores);
 app.use("/mensalidades", routeMensalidade);
