@@ -16,7 +16,7 @@ export const getStudentById = async (table, id) => {
     const result = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [
       id,
     ]);
-    return result.rows;
+    return result.rows[0];
   } catch (error) {
     throw new Error("Erro ao buscar aluno por ID: " + error.message);
   }

@@ -1,4 +1,5 @@
 import * as Model from "../models/students.js";
+import * as MensalidadeModel from "../models/mensalidade.js";
 const table = "alunos";
 
 // Utilitário simples para formatar datas (opcional)
@@ -25,14 +26,27 @@ export const listarAlunos = async (req, res) => {
 };
 
 //? Buscar aluno por ID
-export const listarAlunosID = async (req, res) => {
+export const getAlunoComMovimentacoes = async (req, res) => {
   try {
     const { id } = req.params;
     const aluno = await Model.getStudentById(table, id);
-    if (!aluno || aluno.length === 0)
+    const movimentacoes = await MensalidadeModel.mensalidadeByID(
+      "mensalidades",
+      id
+    );
+
+    if (!aluno)
       return res.status(404).json({ message: "Aluno não encontrado!" });
 
-    res.json(formatDates(aluno[0]));
+    res.json({
+      ...aluno,
+      movimentacoes: movimentacoes.map((m) => ({
+        ...m,
+        data_pagamento: m.data_pagamento
+          ? new Date(m.data_pagamento).toISOString().split("T")[0]
+          : null,
+      })),
+    });
   } catch (error) {
     console.error("❌ Erro ao buscar aluno:", error.message);
     res.status(500).json({ error: "Erro ao buscar aluno" });
