@@ -30,7 +30,7 @@ export const getAlunoComMovimentacoes = async (req, res) => {
   try {
     const { id } = req.params;
     const aluno = await Model.getStudentById(table, id);
-    const movimentacoes = await MensalidadeModel.mensalidadeByID(
+    const movimentacoes = await MensalidadeModel.getMensalidadesByAlunoId(
       "mensalidades",
       id
     );
