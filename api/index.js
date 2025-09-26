@@ -25,7 +25,7 @@ app.use(
 // Rotas principais
 app.use("/alunos", routeAlunos);
 app.use("/professores", routeProfessores);
-app.use("/mensalidades", routeMensalidade);
+app.use("/receita", routeMensalidade);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
