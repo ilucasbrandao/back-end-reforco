@@ -1,4 +1,5 @@
 import * as Model from "../models/teachers.js";
+import * as DespesaModel from "../models/despesas.js";
 const table = "professores";
 
 // Utilitário simples para formatar datas (opcional)
@@ -28,11 +29,27 @@ export const listarProfessores = async (req, res) => {
 export const listarProfessoresID = async (req, res) => {
   try {
     const { id } = req.params;
-    const professor = await Model.getTeachersById(table, id);
-    if (!professor || professor.length === 0) {
+    const professorRows = await Model.getTeachersById(table, id);
+
+    if (!professorRows || professorRows.length === 0) {
       return res.status(404).json({ message: "Professor não encontrado!" });
     }
-    res.json(formatDates(professor[0]));
+
+    const professor = professorRows[0]; // 👈 pega só o objeto
+    const movimentacoes = await DespesaModel.getDespesaByProfessorId(
+      "despesas",
+      id
+    );
+
+    res.json({
+      ...professor,
+      movimentacoes: movimentacoes.map((m) => ({
+        ...m,
+        data_pagamento: m.data_pagamento
+          ? new Date(m.data_pagamento).toISOString().split("T")[0]
+          : null,
+      })),
+    });
   } catch (error) {
     console.error("❌ Erro ao buscar professor:", error.message);
     res.status(500).json({ error: "Erro ao buscar professor" });

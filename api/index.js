@@ -4,6 +4,7 @@ import cors from "cors";
 import routeAlunos from "../routes/students.js";
 import routeProfessores from "../routes/teachers.js";
 import routeMensalidade from "../routes/mensalidade.js";
+import routeDespesas from "../routes/despesas.js";
 import { pool } from "../db.js";
 
 dotenv.config();
@@ -26,6 +27,7 @@ app.use(
 app.use("/alunos", routeAlunos);
 app.use("/professores", routeProfessores);
 app.use("/receita", routeMensalidade);
+app.use("/despesa", routeDespesas);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
