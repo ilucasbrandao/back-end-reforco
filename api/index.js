@@ -5,6 +5,8 @@ import routeAlunos from "../routes/students.js";
 import routeProfessores from "../routes/teachers.js";
 import routeMensalidade from "../routes/mensalidade.js";
 import routeDespesas from "../routes/despesas.js";
+import lancamentosRouter from "../routes/lancamentos.js";
+import resumoDashboard from "../routes/dashboard.js";
 import { pool } from "../db.js";
 
 dotenv.config();
@@ -26,8 +28,10 @@ app.use(
 // Rotas principais
 app.use("/alunos", routeAlunos);
 app.use("/professores", routeProfessores);
-app.use("/receita", routeMensalidade);
+app.use("/receitas", routeMensalidade);
 app.use("/despesa", routeDespesas);
+app.use("/lancamentos", lancamentosRouter);
+app.use("/dashboard", resumoDashboard);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {

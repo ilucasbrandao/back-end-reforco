@@ -1,14 +1,14 @@
 import * as Model from "../models/mensalidade.js";
-const table = "mensalidades";
+const table = "receitas";
 
 // Utilitário simples para formatar datas de mensalidade
-const formatMensalidadeDates = (mensalidade) => {
-  if (!mensalidade) return mensalidade;
+const formatMensalidadeDates = (receita) => {
+  if (!receita) return receita;
   return {
-    ...mensalidade,
-    data_pagamento: mensalidade.data_pagamento?.toISOString().split("T")[0],
-    criado_em: mensalidade.criado_em?.toISOString(),
-    atualizado_em: mensalidade.atualizado_em?.toISOString(),
+    ...receita,
+    data_pagamento: receita.data_pagamento?.toISOString().split("T")[0],
+    criado_em: receita.criado_em?.toISOString(),
+    atualizado_em: receita.atualizado_em?.toISOString(),
   };
 };
 
@@ -16,13 +16,13 @@ const formatMensalidadeDates = (mensalidade) => {
 export const listarMensalidade = async (req, res) => {
   try {
     const { id } = req.params;
-    const mensalidade = await Model.getMensalidadeById(table, id);
+    const receita = await Model.getMensalidadeById(table, id);
 
-    if (!mensalidade) {
+    if (!receita) {
       return res.status(404).json({ message: "Mensalidade não encontrada." });
     }
 
-    res.status(200).json(formatMensalidadeDates(mensalidade));
+    res.status(200).json(formatMensalidadeDates(receita));
   } catch (error) {
     console.error("❌ Erro ao listar mensalidade:", error.message);
     res.status(500).json({ error: "Erro ao buscar mensalidade" });
@@ -33,15 +33,15 @@ export const listarMensalidade = async (req, res) => {
 export const mensalidadeByAluno = async (req, res) => {
   try {
     const { id } = req.params; // id do aluno
-    const mensalidades = await Model.getMensalidadesByAlunoId(table, id);
+    const receita = await Model.getMensalidadesByAlunoId(table, id);
 
-    if (!mensalidades || mensalidades.length === 0) {
+    if (!receita || receita.length === 0) {
       return res
         .status(404)
         .json({ message: "Nenhuma mensalidade encontrada para este aluno." });
     }
 
-    res.json(mensalidades.map(formatMensalidadeDates));
+    res.json(receita.map(formatMensalidadeDates));
   } catch (error) {
     console.error("❌ Erro ao buscar mensalidades por aluno:", error.message);
     res.status(500).json({ error: "Erro ao buscar mensalidades" });
@@ -51,16 +51,16 @@ export const mensalidadeByAluno = async (req, res) => {
 //? Buscar uma mensalidade específica de um aluno
 export const mensalidadeByAlunoId = async (req, res) => {
   try {
-    const { alunoId, mensalidadeId } = req.params;
-    const mensalidade = await Model.getMensalidadeById(table, mensalidadeId);
+    const { alunoId, receitaId } = req.params;
+    const receita = await Model.getMensalidadeById(table, receitaId);
 
-    if (!mensalidade || mensalidade.id_aluno != alunoId) {
+    if (!receita || receita.id_aluno != alunoId) {
       return res
         .status(404)
         .json({ message: "Mensalidade não encontrada para este aluno." });
     }
 
-    res.json(formatMensalidadeDates(mensalidade));
+    res.json(formatMensalidadeDates(receita));
   } catch (error) {
     console.error("❌ Erro ao buscar mensalidade do aluno:", error.message);
     res.status(500).json({ error: "Erro ao buscar mensalidade" });
@@ -70,22 +70,29 @@ export const mensalidadeByAlunoId = async (req, res) => {
 //? CADASTRAR MENSALIDADE
 export const cadastrarMensalidade = async (req, res) => {
   try {
-    const { id_aluno, valor, data_pagamento, mes_referencia, ano_referencia } =
-      req.body;
+    const {
+      id_aluno,
+      valor,
+      data_pagamento,
+      mes_referencia,
+      ano_referencia,
+      descricao,
+    } = req.body;
 
     if (
       !id_aluno ||
       !valor ||
       !data_pagamento ||
       !mes_referencia ||
-      !ano_referencia
+      !ano_referencia ||
+      !descricao
     ) {
       return res
         .status(400)
         .json({ error: "Todos os campos são obrigatórios." });
     }
 
-    const novaMensalidade = await Model.cadastrarMensalidadeAll(
+    const novaReceita = await Model.cadastrarMensalidadeAll(
       table,
       [
         "id_aluno",
@@ -93,11 +100,19 @@ export const cadastrarMensalidade = async (req, res) => {
         "data_pagamento",
         "mes_referencia",
         "ano_referencia",
+        "descricao",
       ],
-      [id_aluno, valor, data_pagamento, mes_referencia, ano_referencia]
+      [
+        id_aluno,
+        valor,
+        data_pagamento,
+        mes_referencia,
+        ano_referencia,
+        descricao,
+      ]
     );
 
-    res.status(201).json(formatMensalidadeDates(novaMensalidade));
+    res.status(201).json(formatMensalidadeDates(novaReceita));
   } catch (error) {
     console.error("❌ Erro ao cadastrar mensalidade:", error.message);
     res.status(500).json({ error: "Erro interno ao cadastrar mensalidade." });
@@ -108,9 +123,9 @@ export const cadastrarMensalidade = async (req, res) => {
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;
-    const mensalidadeDeletada = await Model.deleteMensalidade(table, id);
+    const receitaDeletada = await Model.deleteMensalidade(table, id);
 
-    if (!mensalidadeDeletada) {
+    if (!receitaDeletada) {
       return res
         .status(404)
         .json({ message: "Mensalidade não encontrada para exclusão." });
@@ -118,7 +133,7 @@ export const deletar = async (req, res) => {
 
     res.status(200).json({
       message: "Mensalidade deletada com sucesso",
-      mensalidade: formatMensalidadeDates(mensalidadeDeletada),
+      receitas: formatMensalidadeDates(receitaDeletada),
     });
   } catch (error) {
     console.error("❌ Erro ao deletar mensalidade:", error.message);
@@ -129,19 +144,19 @@ export const deletar = async (req, res) => {
 //? LISTAR MENSALIDADE ESPECÍFICA DE UM ALUNO
 export const mensalidadeByAlunoIdMensalidade = async (req, res) => {
   try {
-    const { alunoId, mensalidadeId } = req.params;
+    const { alunoId, receitasId } = req.params;
 
-    const mensalidade = await Model.getMensalidadeByAlunoIdMensalidade(
-      "mensalidades",
+    const receitas = await Model.getMensalidadeByAlunoIdMensalidade(
+      "receitas",
       alunoId,
-      mensalidadeId
+      receitasId
     );
 
-    if (!mensalidade) {
+    if (!receitas) {
       return res.status(404).json({ message: "Mensalidade não encontrada." });
     }
 
-    res.status(200).json(formatMensalidadeDates(mensalidade));
+    res.status(200).json(formatMensalidadeDates(receitas));
   } catch (error) {
     console.error(
       "❌ Erro ao buscar mensalidade específica do aluno:",
@@ -154,23 +169,20 @@ export const mensalidadeByAlunoIdMensalidade = async (req, res) => {
 // Deletar mensalidade específica de um aluno
 export const deletarMensalidadeAluno = async (req, res) => {
   try {
-    const { alunoId, mensalidadeId } = req.params;
-    const mensalidade = await Model.getMensalidadeById(table, mensalidadeId);
+    const { alunoId, receitasId } = req.params;
+    const receitas = await Model.getMensalidadeById(table, receitasId);
 
-    if (!mensalidade || mensalidade.id_aluno != alunoId) {
+    if (!receitas || receitas.id_aluno != alunoId) {
       return res
         .status(404)
         .json({ message: "Mensalidade não encontrada para este aluno." });
     }
 
-    const mensalidadeDeletada = await Model.deleteMensalidade(
-      table,
-      mensalidadeId
-    );
+    const receitaDeletada = await Model.deleteMensalidade(table, receitasId);
 
     res.status(200).json({
       message: "Mensalidade deletada com sucesso",
-      mensalidade: formatMensalidadeDates(mensalidadeDeletada),
+      mensalidade: formatMensalidadeDates(receitaDeletada),
     });
   } catch (error) {
     console.error("❌ Erro ao deletar mensalidade do aluno:", error.message);

@@ -7,7 +7,7 @@ export const getMensalidadeById = async (table, id) => {
       `SELECT * FROM ${table} WHERE id_mensalidade = $1`,
       [id]
     );
-    return result.rows[0];
+    return result.rows[0] || null;
   } catch (error) {
     throw new Error("Erro ao buscar mensalidade por ID: " + error.message);
   }

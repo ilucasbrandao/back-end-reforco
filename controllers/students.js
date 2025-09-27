@@ -31,7 +31,7 @@ export const getAlunoComMovimentacoes = async (req, res) => {
     const { id } = req.params;
     const aluno = await Model.getStudentById(table, id);
     const movimentacoes = await MensalidadeModel.getMensalidadesByAlunoId(
-      "mensalidades",
+      "receitas",
       id
     );
 
@@ -62,6 +62,7 @@ export const cadastrar = async (req, res) => {
       responsavel,
       telefone,
       data_matricula,
+      valor_mensalidade,
       serie,
       observacao,
       status,
@@ -75,6 +76,7 @@ export const cadastrar = async (req, res) => {
         "responsavel",
         "telefone",
         "data_matricula",
+        "valor_mensalidade",
         "serie",
         "observacao",
         "status",
@@ -85,6 +87,7 @@ export const cadastrar = async (req, res) => {
         responsavel,
         telefone,
         data_matricula,
+        valor_mensalidade,
         serie,
         observacao,
         status,
@@ -116,6 +119,7 @@ export const atualizar = async (req, res) => {
       responsavel,
       telefone,
       data_matricula,
+      valor_mensalidade,
       serie,
       observacao,
       status,
@@ -127,6 +131,11 @@ export const atualizar = async (req, res) => {
       responsavel: responsavel?.trim() || "",
       telefone: telefone || "",
       data_matricula: data_matricula || "",
+      valor_mensalidade:
+        valor_mensalidade === "" || valor_mensalidade == null
+          ? null
+          : parseFloat(valor_mensalidade),
+
       serie: serie?.trim() || "",
       observacao: observacao || "",
       status: status?.trim() || "ativo",

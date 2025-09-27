@@ -4,8 +4,8 @@ import {
   deletar,
   listarMensalidade,
   mensalidadeByAluno,
-  mensalidadeByAlunoId, // nova função
-  deletarMensalidadeAluno, // nova função
+  mensalidadeByAlunoId,
+  deletarMensalidadeAluno,
 } from "../controllers/mensalidade.js";
 
 const router = express.Router();
@@ -13,19 +13,19 @@ const router = express.Router();
 // Cadastrar nova mensalidade
 router.post("/", cadastrarMensalidade);
 
-// Buscar mensalidade por ID da mensalidade
-router.get("/:id", listarMensalidade);
-
-// Buscar todas as mensalidades de um aluno pelo ID do aluno
+// Buscar todas as mensalidades de um aluno
 router.get("/aluno/:id", mensalidadeByAluno);
 
 // Buscar uma mensalidade específica de um aluno
-router.get("/aluno/:alunoId/:mensalidadeId", mensalidadeByAlunoId);
+router.get("/aluno/:alunoId/:receitaId", mensalidadeByAlunoId);
+
+// Buscar mensalidade por ID da mensalidade
+router.get("/:id", listarMensalidade);
+
+// Deletar mensalidade específica de um aluno
+router.delete("/aluno/:alunoId/:receitaId", deletarMensalidadeAluno);
 
 // Deletar mensalidade por ID
 router.delete("/:id", deletar);
-
-// Deletar mensalidade específica de um aluno
-router.delete("/aluno/:alunoId/:mensalidadeId", deletarMensalidadeAluno);
 
 export default router;
