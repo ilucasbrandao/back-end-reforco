@@ -64,6 +64,7 @@ export const cadastrar = async (req, res) => {
       data_matricula,
       valor_mensalidade,
       serie,
+      turno,
       observacao,
       status,
     } = req.body;
@@ -78,6 +79,7 @@ export const cadastrar = async (req, res) => {
         "data_matricula",
         "valor_mensalidade",
         "serie",
+        "turno",
         "observacao",
         "status",
       ],
@@ -89,6 +91,7 @@ export const cadastrar = async (req, res) => {
         data_matricula,
         valor_mensalidade,
         serie,
+        turno,
         observacao,
         status,
       ]
@@ -121,6 +124,7 @@ export const atualizar = async (req, res) => {
       data_matricula,
       valor_mensalidade,
       serie,
+      turno,
       observacao,
       status,
     } = req.body;
@@ -137,6 +141,7 @@ export const atualizar = async (req, res) => {
           : parseFloat(valor_mensalidade),
 
       serie: serie?.trim() || "",
+      turno: turno?.trim() || "",
       observacao: observacao || "",
       status: status?.trim() || "ativo",
     });
