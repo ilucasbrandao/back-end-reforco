@@ -7,8 +7,8 @@ const formatDates = (professor) => {
   if (!professor) return professor;
   return {
     ...professor,
-    dataNascimento: professor.dataNascimento?.toISOString().split("T")[0],
-    dataMatricula: professor.dataMatricula?.toISOString().split("T")[0],
+    data_nascimento: professor.data_nascimento?.toISOString().split("T")[0],
+    data_contratacao: professor.data_contratacao?.toISOString().split("T")[0],
     criado_em: professor.criado_em?.toISOString(),
     atualizado_em: professor.atualizado_em?.toISOString(),
   };

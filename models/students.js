@@ -41,7 +41,7 @@ export const createStudent = async (table, columns, values) => {
 export const updateStudent = async (table, id, data) => {
   try {
     const columns = Object.keys(data).filter(
-      (key) => data[key] !== undefined && data[key] !== null
+      (key) => data[key] !== undefined && data[key] !== null && data[key] !== ""
     );
     const values = columns.map((key) => data[key]);
     const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(", ");

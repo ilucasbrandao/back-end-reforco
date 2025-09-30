@@ -2,7 +2,7 @@ import * as Model from "../models/students.js";
 import * as MensalidadeModel from "../models/mensalidade.js";
 const table = "alunos";
 
-// Utilitário simples para formatar datas (opcional)
+// Utilitário simples para formatar datas
 const formatDates = (aluno) => {
   if (!aluno) return aluno;
   return {
@@ -53,7 +53,7 @@ export const getAlunoComMovimentacoes = async (req, res) => {
   }
 };
 
-//! Criar aluno - back cru, sem validação
+//! Criar aluno
 export const cadastrar = async (req, res) => {
   try {
     const {
@@ -89,7 +89,9 @@ export const cadastrar = async (req, res) => {
         responsavel,
         telefone,
         data_matricula,
-        valor_mensalidade,
+        valor_mensalidade === "" || valor_mensalidade == null
+          ? null
+          : parseFloat(valor_mensalidade),
         serie,
         turno,
         observacao,
@@ -107,12 +109,12 @@ export const cadastrar = async (req, res) => {
   }
 };
 
-//! Atualizar aluno - back cru, sem validação
+//! Atualizar aluno
 export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
     const alunoExistente = await Model.getStudentById(table, id);
-    if (!alunoExistente || alunoExistente.length === 0) {
+    if (!alunoExistente) {
       return res.status(404).json({ message: "Aluno não encontrado." });
     }
 
@@ -129,22 +131,27 @@ export const atualizar = async (req, res) => {
       status,
     } = req.body;
 
-    const alunoAtualizado = await Model.updateStudent(table, id, {
-      nome: nome?.trim() || "",
-      data_nascimento: data_nascimento || "",
-      responsavel: responsavel?.trim() || "",
-      telefone: telefone || "",
-      data_matricula: data_matricula || "",
-      valor_mensalidade:
+    // Só monta o objeto com os campos enviados
+    const data = {};
+    if (nome !== undefined) data.nome = nome.trim();
+    if (data_nascimento !== undefined) data.data_nascimento = data_nascimento;
+    if (responsavel !== undefined) data.responsavel = responsavel.trim();
+    if (telefone !== undefined) data.telefone = telefone;
+    if (data_matricula !== undefined) data.data_matricula = data_matricula;
+
+    if (valor_mensalidade !== undefined) {
+      data.valor_mensalidade =
         valor_mensalidade === "" || valor_mensalidade == null
           ? null
-          : parseFloat(valor_mensalidade),
+          : parseFloat(valor_mensalidade);
+    }
 
-      serie: serie?.trim() || "",
-      turno: turno?.trim() || "",
-      observacao: observacao || "",
-      status: status?.trim() || "ativo",
-    });
+    if (serie !== undefined) data.serie = serie.trim();
+    if (turno !== undefined) data.turno = turno.trim();
+    if (observacao !== undefined) data.observacao = observacao;
+    if (status !== undefined) data.status = status.trim();
+
+    const alunoAtualizado = await Model.updateStudent(table, id, data);
 
     res.status(200).json({
       message: "Aluno atualizado com sucesso",

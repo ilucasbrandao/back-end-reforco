@@ -7,7 +7,14 @@ const router = Router();
 // GET /dashboard?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
 router.get("/", async (req, res) => {
   try {
-    const { inicio, fim } = req.query;
+    let { inicio, fim, mes, ano } = req.query;
+
+    if (mes && ano) {
+      const firstDay = `${ano}-${mes}-01`;
+      const lastDay = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`;
+      inicio = firstDay;
+      fim = lastDay;
+    }
 
     // 1️⃣ Quantidade de alunos ativos
     const { rows: alunosRows } = await pool.query(`
@@ -82,11 +89,21 @@ router.get("/", async (req, res) => {
 
     // 7️⃣ Saldo previsto com salários
     const { rows: salariosRows } = await pool.query(`
-      SELECT SUM(salario) AS total_salarios
+      SELECT COALESCE(SUM(salario::numeric), 0) AS total_salarios
       FROM professores
-      WHERE status = 'ativo'
+      WHERE status = 'ativo'  
     `);
     const saldo_previsto_salarios = Number(salariosRows[0].total_salarios || 0);
+
+    // 8️⃣ Matriculados no mês atual
+    const { rows: matriculadosRows } = await pool.query(`
+  SELECT COUNT(*) AS quantidade
+  FROM alunos
+  WHERE EXTRACT(MONTH FROM data_matricula) = EXTRACT(MONTH FROM CURRENT_DATE)
+    AND EXTRACT(YEAR FROM data_matricula) = EXTRACT(YEAR FROM CURRENT_DATE)
+    AND status = 'ativo'
+`);
+    const matriculados_mes_atual = Number(matriculadosRows[0].quantidade || 0);
 
     res.json({
       alunos_ativos,
@@ -97,6 +114,7 @@ router.get("/", async (req, res) => {
       professoresAniversariantes: professoresAniversariantesRows,
       saldo_previsto_mensalidades,
       saldo_previsto_salarios,
+      matriculados_mes_atual,
     });
   } catch (err) {
     console.error(err);
