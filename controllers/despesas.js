@@ -75,6 +75,7 @@ export const cadastrarDespesa = async (req, res) => {
       data_pagamento,
       mes_referencia,
       ano_referencia,
+      descricao,
     } = req.body;
 
     if (
@@ -82,7 +83,8 @@ export const cadastrarDespesa = async (req, res) => {
       !valor ||
       !data_pagamento ||
       !mes_referencia ||
-      !ano_referencia
+      !ano_referencia ||
+      !descricao
     ) {
       return res
         .status(400)
@@ -97,8 +99,16 @@ export const cadastrarDespesa = async (req, res) => {
         "data_pagamento",
         "mes_referencia",
         "ano_referencia",
+        "descricao",
       ],
-      [id_professor, valor, data_pagamento, mes_referencia, ano_referencia]
+      [
+        id_professor,
+        valor,
+        data_pagamento,
+        mes_referencia,
+        ano_referencia,
+        descricao,
+      ]
     );
     res.status(201).json(formatDespesasDates(novaDespesa));
   } catch (error) {

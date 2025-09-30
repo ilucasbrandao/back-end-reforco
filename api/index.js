@@ -7,6 +7,7 @@ import routeMensalidade from "../routes/mensalidade.js";
 import routeDespesas from "../routes/despesas.js";
 import lancamentosRouter from "../routes/lancamentos.js";
 import resumoDashboard from "../routes/dashboard.js";
+import fecharCaixa from "../routes/caixa.js";
 import { pool } from "../db.js";
 
 dotenv.config();
@@ -32,6 +33,7 @@ app.use("/receitas", routeMensalidade);
 app.use("/despesa", routeDespesas);
 app.use("/lancamentos", lancamentosRouter);
 app.use("/dashboard", resumoDashboard);
+app.use("/fechar-caixa-mes", fecharCaixa);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
