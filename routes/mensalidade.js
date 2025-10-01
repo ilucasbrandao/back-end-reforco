@@ -7,8 +7,11 @@ import {
   mensalidadeByAlunoId,
   deletarMensalidadeAluno,
 } from "../controllers/mensalidade.js";
+import auth from "../middleware/auth.js";
 
 const router = express.Router();
+
+router.use(auth);
 
 // Cadastrar nova mensalidade
 router.post("/", cadastrarMensalidade);

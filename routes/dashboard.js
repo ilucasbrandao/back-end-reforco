@@ -1,8 +1,10 @@
 // src/routes/dashboard.js
 import { Router } from "express";
 import { pool } from "../db.js";
+import auth from "../middleware/auth.js";
 
 const router = Router();
+router.use(auth);
 
 // GET /dashboard?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
 router.get("/", async (req, res) => {

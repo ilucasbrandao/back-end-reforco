@@ -2,12 +2,12 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import dotenv from "dotenv";
-
+import auth from "../middleware/auth.js";
 dotenv.config();
 const router = Router();
 
 // Fechar caixa do mês atual
-router.post("/", async (req, res) => {
+router.post("/", auth, async (req, res) => {
   try {
     const usuario = req.user?.nome || "juliannekelly630"; // vindo do login/token
 
