@@ -105,6 +105,21 @@ router.get("/", async (req, res) => {
     AND EXTRACT(YEAR FROM data_matricula) = EXTRACT(YEAR FROM CURRENT_DATE)
     AND status = 'ativo'
 `);
+
+    // 9️⃣ Alunos inadimplentes no mês atual
+    const { rows: inadimplentesRows } = await pool.query(`
+  SELECT id, nome, valor_mensalidade
+  FROM alunos
+  WHERE status = 'ativo'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM receitas
+      WHERE receitas.id_aluno = alunos.id
+        AND EXTRACT(MONTH FROM data_pagamento) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM data_pagamento) = EXTRACT(YEAR FROM CURRENT_DATE)
+    )
+`);
+
     const matriculados_mes_atual = Number(matriculadosRows[0].quantidade || 0);
 
     res.json({
@@ -117,6 +132,7 @@ router.get("/", async (req, res) => {
       saldo_previsto_mensalidades,
       saldo_previsto_salarios,
       matriculados_mes_atual,
+      inadimplentes: inadimplentesRows,
     });
   } catch (err) {
     console.error(err);

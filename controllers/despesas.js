@@ -75,6 +75,7 @@ export const cadastrarDespesa = async (req, res) => {
       data_pagamento,
       mes_referencia,
       ano_referencia,
+      categoria,
       descricao,
     } = req.body;
 
@@ -84,6 +85,7 @@ export const cadastrarDespesa = async (req, res) => {
       !data_pagamento ||
       !mes_referencia ||
       !ano_referencia ||
+      !categoria ||
       !descricao
     ) {
       return res
@@ -99,6 +101,7 @@ export const cadastrarDespesa = async (req, res) => {
         "data_pagamento",
         "mes_referencia",
         "ano_referencia",
+        "categoria",
         "descricao",
       ],
       [
@@ -107,6 +110,7 @@ export const cadastrarDespesa = async (req, res) => {
         data_pagamento,
         mes_referencia,
         ano_referencia,
+        categoria,
         descricao,
       ]
     );
