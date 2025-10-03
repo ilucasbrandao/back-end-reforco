@@ -30,12 +30,21 @@ export const getMensalidadesByAlunoId = async (table, idAluno) => {
 //! CADASTRAR MENSALIDADE
 export const cadastrarMensalidadeAll = async (table, columns, values) => {
   try {
+    // Monta os nomes das colunas (ex: "id_aluno, valor, data_pagamento, ...")
     const cols = columns.join(", ");
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(", ");
+
+    // Substitui apenas o placeholder da data_pagamento por $X::date
+    const placeholdersWithDateCast = columns
+      .map((col, i) =>
+        col === "data_pagamento" ? `$${i + 1}::date` : `$${i + 1}`
+      )
+      .join(", ");
+
     const result = await pool.query(
-      `INSERT INTO ${table} (${cols}) VALUES (${placeholders}) RETURNING *`,
+      `INSERT INTO ${table} (${cols}) VALUES (${placeholdersWithDateCast}) RETURNING *`,
       values
     );
+
     return result.rows[0];
   } catch (error) {
     throw new Error("Erro ao inserir mensalidade: " + error.message);

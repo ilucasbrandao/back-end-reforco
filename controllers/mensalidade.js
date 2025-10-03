@@ -6,7 +6,8 @@ const formatMensalidadeDates = (receita) => {
   if (!receita) return receita;
   return {
     ...receita,
-    data_pagamento: receita.data_pagamento?.toISOString().split("T")[0],
+    // Agora data_pagamento será igual ao criado_em
+    data_pagamento: receita.criado_em?.toISOString().split("T")[0] || null, // YYYY-MM-DD
     criado_em: receita.criado_em?.toISOString(),
     atualizado_em: receita.atualizado_em?.toISOString(),
   };
@@ -33,15 +34,15 @@ export const listarMensalidade = async (req, res) => {
 export const mensalidadeByAluno = async (req, res) => {
   try {
     const { id } = req.params; // id do aluno
-    const receita = await Model.getMensalidadesByAlunoId(table, id);
+    const receitas = await Model.getMensalidadesByAlunoId(table, id);
 
-    if (!receita || receita.length === 0) {
+    if (!receitas || receitas.length === 0) {
       return res
         .status(404)
         .json({ message: "Nenhuma mensalidade encontrada para este aluno." });
     }
 
-    res.json(receita.map(formatMensalidadeDates));
+    res.json(receitas.map(formatMensalidadeDates));
   } catch (error) {
     console.error("❌ Erro ao buscar mensalidades por aluno:", error.message);
     res.status(500).json({ error: "Erro ao buscar mensalidades" });
@@ -70,19 +71,12 @@ export const mensalidadeByAlunoId = async (req, res) => {
 //? CADASTRAR MENSALIDADE
 export const cadastrarMensalidade = async (req, res) => {
   try {
-    const {
-      id_aluno,
-      valor,
-      data_pagamento,
-      mes_referencia,
-      ano_referencia,
-      descricao,
-    } = req.body;
+    const { id_aluno, valor, mes_referencia, ano_referencia, descricao } =
+      req.body;
 
     if (
       !id_aluno ||
       !valor ||
-      !data_pagamento ||
       !mes_referencia ||
       !ano_referencia ||
       !descricao
@@ -92,24 +86,11 @@ export const cadastrarMensalidade = async (req, res) => {
         .json({ error: "Todos os campos são obrigatórios." });
     }
 
+    // Não usamos mais data_pagamento do front; o banco vai gerar criado_em
     const novaReceita = await Model.cadastrarMensalidadeAll(
       table,
-      [
-        "id_aluno",
-        "valor",
-        "data_pagamento",
-        "mes_referencia",
-        "ano_referencia",
-        "descricao",
-      ],
-      [
-        id_aluno,
-        valor,
-        data_pagamento,
-        mes_referencia,
-        ano_referencia,
-        descricao,
-      ]
+      ["id_aluno", "valor", "mes_referencia", "ano_referencia", "descricao"],
+      [id_aluno, valor, mes_referencia, ano_referencia, descricao]
     );
 
     res.status(201).json(formatMensalidadeDates(novaReceita));
@@ -146,17 +127,17 @@ export const mensalidadeByAlunoIdMensalidade = async (req, res) => {
   try {
     const { alunoId, receitasId } = req.params;
 
-    const receitas = await Model.getMensalidadeByAlunoIdMensalidade(
-      "receitas",
+    const receita = await Model.getMensalidadeByAlunoIdMensalidade(
+      table,
       alunoId,
       receitasId
     );
 
-    if (!receitas) {
+    if (!receita) {
       return res.status(404).json({ message: "Mensalidade não encontrada." });
     }
 
-    res.status(200).json(formatMensalidadeDates(receitas));
+    res.status(200).json(formatMensalidadeDates(receita));
   } catch (error) {
     console.error(
       "❌ Erro ao buscar mensalidade específica do aluno:",
@@ -170,9 +151,9 @@ export const mensalidadeByAlunoIdMensalidade = async (req, res) => {
 export const deletarMensalidadeAluno = async (req, res) => {
   try {
     const { alunoId, receitasId } = req.params;
-    const receitas = await Model.getMensalidadeById(table, receitasId);
+    const receita = await Model.getMensalidadeById(table, receitasId);
 
-    if (!receitas || receitas.id_aluno != alunoId) {
+    if (!receita || receita.id_aluno != alunoId) {
       return res
         .status(404)
         .json({ message: "Mensalidade não encontrada para este aluno." });

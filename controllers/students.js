@@ -98,6 +98,7 @@ export const cadastrar = async (req, res) => {
         status,
       ]
     );
+    console.log("Data recebida:", data_pagamento, typeof data_pagamento);
 
     res.status(201).json({
       message: "Aluno cadastrado com sucesso.",

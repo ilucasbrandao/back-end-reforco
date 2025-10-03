@@ -11,13 +11,29 @@ router.get("/", async (req, res) => {
     const { inicio, fim } = req.query;
     const params = [inicio || null, fim || null];
 
-    // 1️⃣ Buscar lançamentos filtrados
+    // 1️⃣ Buscar lançamentos com mensalidades (data_pagamento = criado_em)
     const queryLancamentos = `
-      SELECT *
-      FROM public.lancamentos
-      WHERE ($1::date IS NULL OR data::date >= $1)
-        AND ($2::date IS NULL OR data::date <= $2)
-      ORDER BY data DESC
+      SELECT
+        l.lancamento_id,
+        l.tipo,
+        l.origem_id,
+        l.descricao,
+        l.valor,
+        l.status,
+        COALESCE(m.criado_em, l.data) AS data, -- mensalidade pega criado_em, outros usam l.data
+        a.nome AS nome_aluno,
+        p.nome AS nome_professor
+      FROM public.lancamentos l
+      LEFT JOIN public.receitas m
+        ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
+      LEFT JOIN public.alunos a
+        ON l.id_aluno = a.id
+      LEFT JOIN public.professores p
+        ON l.id_professor = p.id
+      WHERE
+        ($1::date IS NULL OR COALESCE(m.criado_em, l.data)::date >= $1)
+        AND ($2::date IS NULL OR COALESCE(m.criado_em, l.data)::date <= $2)
+      ORDER BY COALESCE(m.criado_em, l.data) DESC
     `;
     const lancamentosResult = await pool.query(queryLancamentos, params);
 
@@ -27,19 +43,21 @@ router.get("/", async (req, res) => {
         SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS total_receitas,
         SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS total_despesas,
         SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END) AS saldo
-      FROM public.lancamentos
-      WHERE ($1::date IS NULL OR data::date >= $1)
-        AND ($2::date IS NULL OR data::date <= $2)
+      FROM public.lancamentos l
+      LEFT JOIN public.receitas m
+        ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
+      WHERE
+        ($1::date IS NULL OR COALESCE(m.criado_em, l.data)::date >= $1)
+        AND ($2::date IS NULL OR COALESCE(m.criado_em, l.data)::date <= $2)
     `;
     const resumoResult = await pool.query(queryResumo, params);
 
-    // Retornar tudo junto
     res.json({
       lancamentos: lancamentosResult.rows,
       resumo: resumoResult.rows[0],
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Erro ao buscar lançamentos e resumo:", err);
     res.status(500).json({ error: "Erro ao buscar lançamentos e resumo" });
   }
 });
