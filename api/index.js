@@ -9,6 +9,7 @@ import lancamentosRouter from "../routes/lancamentos.js";
 import resumoDashboard from "../routes/dashboard.js";
 import fecharCaixa from "../routes/caixa.js";
 import relatorioRoutes from "../routes/relatorio.js";
+import inadiplentesRouter from "../routes/inadimplentes.js";
 import { pool } from "../db.js";
 import auth from "../middleware/auth.js";
 
@@ -43,6 +44,7 @@ app.use("/lancamentos", lancamentosRouter);
 app.use("/dashboard", resumoDashboard);
 app.use("/fechar-caixa-mes", fecharCaixa);
 app.use("/", relatorioRoutes);
+app.use("/", auth, inadiplentesRouter);
 
 // Rota de teste de conexão
 app.get("/ping", async (req, res) => {
