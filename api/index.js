@@ -36,7 +36,7 @@ app.use(
 );
 
 // Rotas principais
-app.use("/alunos", auth, routeAlunos);
+app.use("/alunos", routeAlunos);
 app.use("/professores", auth, routeProfessores);
 app.use("/receitas", routeMensalidade);
 app.use("/despesa", routeDespesas);
