@@ -34,6 +34,21 @@ router.get("/relatorio-mensal", async (req, res) => {
       `SELECT COUNT(*) as total FROM professores WHERE status = 'ativo'`
     );
 
+    // Alunos inadimplentes no mês/ano informado
+    const inadimplentes = await pool.query(
+      `SELECT id, nome, valor_mensalidade
+   FROM alunos
+   WHERE status = 'ativo'
+     AND NOT EXISTS (
+       SELECT 1
+       FROM receitas
+       WHERE receitas.id_aluno = alunos.id
+         AND EXTRACT(MONTH FROM data_pagamento) = $1
+         AND EXTRACT(YEAR FROM data_pagamento) = $2
+     )`,
+      [mes, ano]
+    );
+
     const totalReceitas = receitas.rows[0].total
       ? parseFloat(receitas.rows[0].total)
       : 0;
@@ -47,6 +62,7 @@ router.get("/relatorio-mensal", async (req, res) => {
       saldo: totalReceitas - totalDespesas,
       alunos_status: parseInt(alunos.rows[0].total) || 0,
       professores_status: parseInt(professores.rows[0].total) || 0,
+      inadimplentes: inadimplentes.rows,
     });
   } catch (err) {
     console.error(err);
