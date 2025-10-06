@@ -2,12 +2,15 @@ import * as Model from "../models/students.js";
 import * as MensalidadeModel from "../models/mensalidade.js";
 const table = "alunos";
 
-// Utilitário simples para formatar datas
 // Corrige fuso para exibir data local no formato YYYY-MM-DD
 function formatLocalDate(date) {
   if (!date) return null;
+  // PostgreSQL já retorna 'YYYY-MM-DD' para campos DATE
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date; // já está no formato correto, não cria objeto Date
+  }
   const d = new Date(date);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); // 👈 remove efeito UTC
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().split("T")[0];
 }
 

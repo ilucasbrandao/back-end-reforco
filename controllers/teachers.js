@@ -3,12 +3,22 @@ import * as DespesaModel from "../models/despesas.js";
 const table = "professores";
 
 // Utilitário simples para formatar datas (opcional)
+const formatLocalDate = (date) => {
+  if (!date) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date;
+  }
+  const d = new Date(date);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split("T")[0];
+};
+
 const formatDates = (professor) => {
   if (!professor) return professor;
   return {
     ...professor,
-    data_nascimento: professor.data_nascimento?.toISOString().split("T")[0],
-    data_contratacao: professor.data_contratacao?.toISOString().split("T")[0],
+    data_nascimento: formatLocalDate(professor.data_nascimento),
+    data_contratacao: formatLocalDate(professor.data_contratacao),
     criado_em: professor.criado_em?.toISOString(),
     atualizado_em: professor.atualizado_em?.toISOString(),
   };
