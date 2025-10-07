@@ -6,12 +6,13 @@ const formatDespesasDates = (despesa) => {
   if (!despesa) return despesa;
   return {
     ...despesa,
-    data_pagamento:
-      typeof despesa.data_pagamento === "string"
-        ? despesa.data_pagamento
-        : despesa.data_pagamento?.toISOString().split("T")[0],
-    criado_em: despesa.criado_em?.toISOString(),
-    atualizado_em: despesa.atualizado_em?.toISOString(),
+    data_pagamento: despesa.data_pagamento
+      ? dayjs(despesa.data_pagamento).format("YYYY-MM-DD")
+      : null,
+    criado_em: despesa.criado_em ? despesa.criado_em.toISOString() : null,
+    atualizado_em: despesa.atualizado_em
+      ? despesa.atualizado_em.toISOString()
+      : null,
   };
 };
 
