@@ -6,7 +6,10 @@ const formatDespesasDates = (despesa) => {
   if (!despesa) return despesa;
   return {
     ...despesa,
-    data_pagamento: despesa.data_pagamento?.toISOString().split("T")[0],
+    data_pagamento:
+      typeof despesa.data_pagamento === "string"
+        ? despesa.data_pagamento
+        : despesa.data_pagamento?.toISOString().split("T")[0],
     criado_em: despesa.criado_em?.toISOString(),
     atualizado_em: despesa.atualizado_em?.toISOString(),
   };

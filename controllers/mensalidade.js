@@ -71,12 +71,19 @@ export const mensalidadeByAlunoId = async (req, res) => {
 //? CADASTRAR MENSALIDADE
 export const cadastrarMensalidade = async (req, res) => {
   try {
-    const { id_aluno, valor, mes_referencia, ano_referencia, descricao } =
-      req.body;
+    const {
+      id_aluno,
+      data_pagamento,
+      valor,
+      mes_referencia,
+      ano_referencia,
+      descricao,
+    } = req.body;
 
     if (
       !id_aluno ||
       !valor ||
+      !data_pagamento ||
       !mes_referencia ||
       !ano_referencia ||
       !descricao
@@ -89,8 +96,22 @@ export const cadastrarMensalidade = async (req, res) => {
     // Não usamos mais data_pagamento do front; o banco vai gerar criado_em
     const novaReceita = await Model.cadastrarMensalidadeAll(
       table,
-      ["id_aluno", "valor", "mes_referencia", "ano_referencia", "descricao"],
-      [id_aluno, valor, mes_referencia, ano_referencia, descricao]
+      [
+        "id_aluno",
+        "valor",
+        "data_pagamento",
+        "mes_referencia",
+        "ano_referencia",
+        "descricao",
+      ],
+      [
+        id_aluno,
+        valor,
+        data_pagamento,
+        mes_referencia,
+        ano_referencia,
+        descricao,
+      ]
     );
 
     res.status(201).json(formatMensalidadeDates(novaReceita));
