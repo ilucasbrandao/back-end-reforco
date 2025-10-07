@@ -11,33 +11,33 @@ router.get("/", async (req, res) => {
     const { inicio, fim } = req.query;
     const params = [inicio || null, fim || null];
 
-    // 1️⃣ Buscar lançamentos com mensalidades (data_pagamento = criado_em)
+    // 1️⃣ Buscar lançamentos (receitas usam data_pagamento, despesas usam l.data)
     const queryLancamentos = `
-  SELECT
-    l.lancamento_id,
-    l.tipo,
-    l.origem_id,
-    l.descricao,
-    l.valor,
-    'Finalizada' AS status,
-    COALESCE(
-        TO_CHAR(m.criado_em, 'YYYY-MM-DD'),
-        TO_CHAR(l.data, 'YYYY-MM-DD')
-    ) AS data,
-    a.nome AS nome_aluno,
-    p.nome AS nome_professor
-  FROM public.lancamentos l
-  LEFT JOIN public.receitas m
-    ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
-  LEFT JOIN public.alunos a
-    ON l.id_aluno = a.id
-  LEFT JOIN public.professores p
-    ON l.id_professor = p.id
-  WHERE
-    ($1::date IS NULL OR COALESCE(m.criado_em, l.data)::date >= $1)
-    AND ($2::date IS NULL OR COALESCE(m.criado_em, l.data)::date <= $2)
-  ORDER BY COALESCE(m.criado_em, l.data) DESC
-`;
+      SELECT
+        l.lancamento_id,
+        l.tipo,
+        l.origem_id,
+        l.descricao,
+        l.valor,
+        'Finalizada' AS status,
+        COALESCE(
+            TO_CHAR(m.data_pagamento, 'YYYY-MM-DD'), -- data de pagamento da receita
+            TO_CHAR(l.data, 'YYYY-MM-DD')            -- data da despesa
+        ) AS data,
+        a.nome AS nome_aluno,
+        p.nome AS nome_professor
+      FROM public.lancamentos l
+      LEFT JOIN public.receitas m
+        ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
+      LEFT JOIN public.alunos a
+        ON l.id_aluno = a.id
+      LEFT JOIN public.professores p
+        ON l.id_professor = p.id
+      WHERE
+        ($1::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date >= $1)
+        AND ($2::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date <= $2)
+      ORDER BY COALESCE(m.data_pagamento, l.data) DESC
+    `;
 
     const lancamentosResult = await pool.query(queryLancamentos, params);
 
@@ -51,8 +51,8 @@ router.get("/", async (req, res) => {
       LEFT JOIN public.receitas m
         ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
       WHERE
-        ($1::date IS NULL OR COALESCE(m.criado_em, l.data)::date >= $1)
-        AND ($2::date IS NULL OR COALESCE(m.criado_em, l.data)::date <= $2)
+        ($1::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date >= $1)
+        AND ($2::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date <= $2)
     `;
     const resumoResult = await pool.query(queryResumo, params);
 
