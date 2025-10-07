@@ -22,44 +22,18 @@ if (!process.env.JWT_SECRET) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
-import cors from "cors";
 
-const allowedOrigins = [
-  "https://sistema-escolar-juh.vercel.app",
-  "http://localhost:5173",
-];
+app.use(express.json());
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true); // Postman, curl etc.
-      if (!allowedOrigins.includes(origin))
-        return callback(new Error("CORS não permitido"), false);
-      return callback(null, true);
-    },
+    origin: [
+      "https://sistema-escolar-juh.vercel.app", // produção
+      "http://localhost:5173", // desenvolvimento
+    ],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"], // ⬅ precisa permitir Authorization
   })
 );
-
-// Preflight requests
-app.options(
-  "*",
-  cors({
-    origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
-      if (!allowedOrigins.includes(origin))
-        return callback(new Error("CORS não permitido"), false);
-      return callback(null, true);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
-app.use(express.json());
 
 // Rotas principais
 app.use("/alunos", routeAlunos);
