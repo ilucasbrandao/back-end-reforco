@@ -51,6 +51,19 @@ export const cadastrarMensalidadeAll = async (table, columns, values) => {
   }
 };
 
+export async function getMensalidadeExistente(table, id_aluno, mes, ano) {
+  const query = `
+    SELECT id_mensalidade
+    FROM ${table}
+    WHERE id_aluno = $1
+      AND mes_referencia = $2
+      AND ano_referencia = $3
+    LIMIT 1
+  `;
+  const { rows } = await pool.query(query, [id_aluno, mes, ano]);
+  return rows.length > 0 ? rows[0] : null;
+}
+
 //! DELETAR POR ID
 export const deleteMensalidade = async (table, id) => {
   try {

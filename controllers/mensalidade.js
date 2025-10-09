@@ -69,6 +69,7 @@ export const mensalidadeByAlunoId = async (req, res) => {
 };
 
 //? CADASTRAR MENSALIDADE
+//? CADASTRAR MENSALIDADE
 export const cadastrarMensalidade = async (req, res) => {
   try {
     const {
@@ -93,9 +94,25 @@ export const cadastrarMensalidade = async (req, res) => {
         .json({ error: "Todos os campos são obrigatórios." });
     }
 
-    // Não usamos mais data_pagamento do front; o banco vai gerar criado_em
+    // 🔎 1. Verifica se já existe mensalidade no mesmo mês/ano para o aluno
+    const verificaDuplicada = await Model.getMensalidadeExistente(
+      "receitas",
+      id_aluno,
+      mes_referencia,
+      ano_referencia
+    );
+
+    if (verificaDuplicada) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Já existe uma mensalidade cadastrada para este aluno neste mês.",
+      });
+    }
+
+    // 🔹 2. Se não existir, cadastra normalmente
     const novaReceita = await Model.cadastrarMensalidadeAll(
-      table,
+      "receitas",
       [
         "id_aluno",
         "valor",
@@ -114,7 +131,11 @@ export const cadastrarMensalidade = async (req, res) => {
       ]
     );
 
-    res.status(201).json(formatMensalidadeDates(novaReceita));
+    res.status(201).json({
+      success: true,
+      message: "Mensalidade cadastrada com sucesso!",
+      data: novaReceita,
+    });
   } catch (error) {
     console.error("❌ Erro ao cadastrar mensalidade:", error.message);
     res.status(500).json({ error: "Erro interno ao cadastrar mensalidade." });
