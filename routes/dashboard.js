@@ -6,19 +6,21 @@ import auth from "../middleware/auth.js";
 const router = Router();
 router.use(auth);
 
-// GET /dashboard?inicio=YYYY-MM-DD&fim=YYYY-MM-DD
+// GET /dashboard?mes=11&ano=2024
 router.get("/", async (req, res) => {
   try {
-    let { inicio, fim, mes, ano } = req.query;
+    let { mes, ano } = req.query;
 
-    if (mes && ano) {
-      const firstDay = `${ano}-${mes}-01`;
-      const lastDay = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`;
-      inicio = firstDay;
-      fim = lastDay;
-    }
+    // Garante que mes e ano sejam números para o SQL
+    const mesNum = Number(mes);
+    const anoNum = Number(ano);
 
-    // 1️⃣ Quantidade de alunos ativos
+    // Define inicio e fim para consultas de intervalo (Lançamentos)
+    const firstDay = `${ano}-${mes}-01`;
+    // Pega o último dia do mês dinamicamente
+    const lastDay = `${ano}-${mes}-${new Date(anoNum, mesNum, 0).getDate()}`;
+
+    // 1️⃣ Quantidade de alunos ativos (Snapshot - Independe do mês)
     const { rows: alunosRows } = await pool.query(`
       SELECT COUNT(*) AS quantidade
       FROM alunos
@@ -26,7 +28,7 @@ router.get("/", async (req, res) => {
     `);
     const alunos_ativos = Number(alunosRows[0].quantidade);
 
-    // 2️⃣ Quantidade de professores ativos
+    // 2️⃣ Quantidade de professores ativos (Snapshot)
     const { rows: professoresRows } = await pool.query(`
       SELECT COUNT(*) AS quantidade
       FROM professores
@@ -34,7 +36,7 @@ router.get("/", async (req, res) => {
     `);
     const professores_ativos = Number(professoresRows[0].quantidade);
 
-    // 3️⃣ Alunos por turno
+    // 3️⃣ Alunos por turno (Snapshot)
     const { rows: turnoRows } = await pool.query(`
       SELECT turno, COUNT(*) AS quantidade
       FROM alunos
@@ -46,7 +48,7 @@ router.get("/", async (req, res) => {
       (r) => (alunos_por_turno[r.turno] = Number(r.quantidade))
     );
 
-    // 4️⃣ Saldo de caixa no período
+    // 4️⃣ Saldo de caixa no período (CORRIGIDO: Já estava certo, usa firstDay/lastDay)
     const { rows: caixaRows } = await pool.query(
       `
       SELECT
@@ -54,23 +56,26 @@ router.get("/", async (req, res) => {
         SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS total_despesas,
         SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END) AS saldo
       FROM lancamentos
-      WHERE ($1::date IS NULL OR data::date >= $1)
-        AND ($2::date IS NULL OR data::date <= $2)
+      WHERE data >= $1::date AND data <= $2::date
     `,
-      [inicio || null, fim || null]
+      [firstDay, lastDay]
     );
     const saldo_caixa = Number(caixaRows[0].saldo || 0);
 
-    // 5️⃣ Aniversariantes do mês atual
-    const { rows: aniversariantesRows } = await pool.query(`
+    // 5️⃣ Aniversariantes do mês SELECIONADO (CORRIGIDO)
+    // Antes usava CURRENT_DATE, agora usa $1 (mesNum)
+    const { rows: aniversariantesRows } = await pool.query(
+      `
       SELECT nome, data_nascimento
       FROM alunos
-      WHERE EXTRACT(MONTH FROM data_nascimento) = EXTRACT(MONTH FROM CURRENT_DATE)
+      WHERE EXTRACT(MONTH FROM data_nascimento) = $1
         AND status = 'ativo'
       ORDER BY EXTRACT(DAY FROM data_nascimento)
-    `);
+    `,
+      [mesNum]
+    );
 
-    // 6️⃣ Saldo previsto de mensalidades (somando valor cadastrado por aluno)
+    // 6️⃣ Saldo previsto de mensalidades (Snapshot)
     const { rows: mensalidadesRows } = await pool.query(`
       SELECT SUM(valor_mensalidade) AS saldo_previsto
       FROM alunos
@@ -80,16 +85,19 @@ router.get("/", async (req, res) => {
       mensalidadesRows[0].saldo_previsto || 0
     );
 
-    // 5️⃣ Aniversariantes do mês atual
-    const { rows: professoresAniversariantesRows } = await pool.query(`
+    // 7️⃣ Aniversariantes Professores (CORRIGIDO)
+    const { rows: professoresAniversariantesRows } = await pool.query(
+      `
       SELECT nome, data_nascimento
       FROM professores
-      WHERE EXTRACT(MONTH FROM data_nascimento) = EXTRACT(MONTH FROM CURRENT_DATE)
+      WHERE EXTRACT(MONTH FROM data_nascimento) = $1
         AND status = 'ativo'
       ORDER BY EXTRACT(DAY FROM data_nascimento)
-    `);
+    `,
+      [mesNum]
+    );
 
-    // 7️⃣ Saldo previsto com salários
+    // 8️⃣ Saldo previsto com salários (Snapshot)
     const { rows: salariosRows } = await pool.query(`
       SELECT COALESCE(SUM(salario::numeric), 0) AS total_salarios
       FROM professores
@@ -97,30 +105,48 @@ router.get("/", async (req, res) => {
     `);
     const saldo_previsto_salarios = Number(salariosRows[0].total_salarios || 0);
 
-    // 8️⃣ Matriculados no mês atual
-    const { rows: matriculadosRows } = await pool.query(`
-  SELECT COUNT(*) AS quantidade
-  FROM alunos
-  WHERE EXTRACT(MONTH FROM data_matricula) = EXTRACT(MONTH FROM CURRENT_DATE)
-    AND EXTRACT(YEAR FROM data_matricula) = EXTRACT(YEAR FROM CURRENT_DATE)
-    AND status = 'ativo'
-`);
-
-    // 9️⃣ Alunos inadimplentes no mês atual
-    const { rows: inadimplentesRows } = await pool.query(`
-  SELECT id, nome, valor_mensalidade
-  FROM alunos
-  WHERE status = 'ativo'
-    AND NOT EXISTS (
-      SELECT 1
-      FROM receitas
-      WHERE receitas.id_aluno = alunos.id
-        AND EXTRACT(MONTH FROM data_pagamento) = EXTRACT(MONTH FROM CURRENT_DATE)
-        AND EXTRACT(YEAR FROM data_pagamento) = EXTRACT(YEAR FROM CURRENT_DATE)
-    )
-`);
+    // 9️⃣ Matriculados no mês SELECIONADO (CORRIGIDO)
+    // Agora verifica se a matrícula foi no mês/ano do filtro
+    const { rows: matriculadosRows } = await pool.query(
+      `
+      SELECT COUNT(*) AS quantidade
+      FROM alunos
+      WHERE EXTRACT(MONTH FROM data_matricula) = $1
+        AND EXTRACT(YEAR FROM data_matricula) = $2
+        AND status = 'ativo'
+    `,
+      [mesNum, anoNum]
+    );
 
     const matriculados_mes_atual = Number(matriculadosRows[0].quantidade || 0);
+
+    // 🔟 Inadimplentes do mês SELECIONADO (CORRIGIDO E MELHORADO)
+    // A lógica aqui deve buscar na tabela 'receitas' pelo mes_referencia e ano_referencia
+    // Se você não tiver essas colunas, use data_pagamento, mas referência é o ideal para mensalidade.
+    // Assumindo que sua tabela receitas tem 'mes_referencia' e 'ano_referencia' (como fizemos no front):
+
+    const { rows: inadimplentesRows } = await pool.query(
+      `
+      SELECT id, nome, valor_mensalidade, telefone
+      FROM alunos
+      WHERE status = 'ativo'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM receitas
+          WHERE receitas.id_aluno = alunos.id
+            AND receitas.mes_referencia = $1
+            AND receitas.ano_referencia = $2
+        )
+    `,
+      [mesNum, anoNum]
+    );
+
+    /* ⚠️ NOTA: Se o seu banco NÃO tiver as colunas mes_referencia/ano_referencia na tabela 'receitas',
+       use a versão abaixo baseada na data do pagamento:
+       
+       AND EXTRACT(MONTH FROM data_pagamento) = $1
+       AND EXTRACT(YEAR FROM data_pagamento) = $2
+    */
 
     res.json({
       alunos_ativos,
