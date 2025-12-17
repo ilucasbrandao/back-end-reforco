@@ -12,11 +12,12 @@ const table = "alunos";
 // Corrige fuso para exibir data local no formato YYYY-MM-DD
 function formatLocalDate(date) {
   if (!date) return null;
-  // PostgreSQL já retorna 'YYYY-MM-DD' para campos DATE
+  // PostgreSQL já retorna 'YYYY-MM-DD' para campos DATE, mas garantimos aqui
   if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return date;
   }
   const d = new Date(date);
+  // Ajusta para o fuso local antes de extrair a data
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().split("T")[0];
 }
@@ -27,6 +28,7 @@ const formatDates = (aluno) => {
     ...aluno,
     data_nascimento: formatLocalDate(aluno.data_nascimento),
     data_matricula: formatLocalDate(aluno.data_matricula),
+    // Formata datas de timestamp para exibição amigável
     criado_em: aluno.criado_em
       ? new Date(aluno.criado_em).toLocaleString("pt-BR")
       : null,
@@ -44,6 +46,7 @@ const formatDates = (aluno) => {
 export const listarAlunos = async (req, res) => {
   try {
     const alunos = await Model.getStudentsAll(table);
+    // Mapeia os alunos formatando as datas antes de enviar
     res.status(200).json(alunos.map(formatDates));
   } catch (error) {
     console.error("❌ Erro ao listar alunos:", error.message);
@@ -56,16 +59,18 @@ export const getAlunoComMovimentacoes = async (req, res) => {
   try {
     const { id } = req.params;
     const aluno = await Model.getStudentById(table, id);
+
+    if (!aluno) {
+      return res.status(404).json({ message: "Aluno não encontrado!" });
+    }
+
     const movimentacoes = await MensalidadeModel.getMensalidadesByAlunoId(
       "receitas",
       id
     );
 
-    if (!aluno)
-      return res.status(404).json({ message: "Aluno não encontrado!" });
-
-    // --- NOVO: BUSCAR DADOS DE ACESSO (PLANO E EMAIL) ---
-    // Fazemos uma query direta para saber se tem responsável vinculado
+    // --- BUSCAR DADOS DE ACESSO (PLANO E EMAIL) ---
+    // Busca dados do usuário responsável vinculado ao aluno
     const dadosAcesso = await pool.query(
       `SELECT u.email, u.plano 
        FROM users u
@@ -74,13 +79,18 @@ export const getAlunoComMovimentacoes = async (req, res) => {
       [id]
     );
 
+    // Se não encontrar, define valores padrão
     const acesso = dadosAcesso.rows[0] || { plano: "basico", email: "" };
-    // ----------------------------------------------------
+
+    // Se o plano no banco de dados do aluno for diferente do usuário (inconsistência), prioriza o do usuário ou o do aluno?
+    // Aqui estamos assumindo que a tabela 'alunos' também tem uma coluna 'plano' para redundância/facilidade
+    // Mas a fonte da verdade para acesso é a tabela 'users'.
+    // Vamos enviar o plano que está na tabela alunos, mas se não tiver, usa o do user.
+    const planoFinal = aluno.plano || acesso.plano || "padrao";
 
     res.json({
-      ...aluno,
-      // Injetamos essas infos para o Front usar no formulário de edição
-      plano: acesso.plano,
+      ...formatDates(aluno), // Formata datas do aluno também
+      plano: planoFinal,
       email_responsavel: acesso.email,
       movimentacoes: movimentacoes.map((m) => ({
         ...m,
@@ -112,17 +122,26 @@ export const cadastrar = async (req, res) => {
       turno,
       observacao,
       status,
+      // Dados de Acesso
       plano,
       email_responsavel,
     } = req.body;
+
+    // Validação básica para plano premium
+    if (plano === "premium" && !email_responsavel) {
+      return res.status(400).json({
+        error: "Para o plano Premium, o email do responsável é obrigatório.",
+      });
+    }
 
     // --- INÍCIO DA TRANSAÇÃO (Tudo ou Nada) ---
     await client.query("BEGIN");
 
     // 1. INSERIR O ALUNO NA TABELA 'ALUNOS'
+    // Adicionei 'plano' na query de insert para manter a info na tabela de alunos também
     const insertAlunoQuery = `
-      INSERT INTO alunos (nome, data_nascimento, responsavel, telefone, data_matricula, valor_mensalidade, serie, turno, observacao, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO alunos (nome, data_nascimento, responsavel, telefone, data_matricula, valor_mensalidade, serie, turno, observacao, status, plano)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `;
 
@@ -138,7 +157,8 @@ export const cadastrar = async (req, res) => {
       serie,
       turno,
       observacao,
-      status,
+      status || "ativo", // Default status
+      plano || "padrao", // Default plano
     ];
 
     const alunoResult = await client.query(insertAlunoQuery, valuesAluno);
@@ -148,27 +168,26 @@ export const cadastrar = async (req, res) => {
     let dadosAcesso = null;
 
     if (plano === "premium") {
-      if (!email_responsavel) {
-        throw new Error(
-          "Para o plano Premium, o email do responsável é obrigatório."
-        );
-      }
-
       // A. Verificar se o pai já tem cadastro (pelo email)
       const userCheck = await client.query(
-        "SELECT id FROM users WHERE email = $1",
+        "SELECT id, plano FROM users WHERE email = $1",
         [email_responsavel]
       );
+
       let userId;
 
       if (userCheck.rows.length > 0) {
-        // Pai já existe (tem outro filho). Usamos o mesmo ID.
+        // Pai já existe (tem outro filho ou cadastro anterior). Usamos o mesmo ID.
         userId = userCheck.rows[0].id;
+        const userPlano = userCheck.rows[0].plano;
 
-        // Opcional: Atualiza o plano do pai para premium se ele era básico
-        await client.query("UPDATE users SET plano = 'premium' WHERE id = $1", [
-          userId,
-        ]);
+        // Atualiza o plano do pai para premium se ele era básico (Upgrade de conta)
+        if (userPlano !== "premium") {
+          await client.query(
+            "UPDATE users SET plano = 'premium' WHERE id = $1",
+            [userId]
+          );
+        }
       } else {
         // B. Criar Senha Padrão baseada na Data de Nascimento do aluno
         // Ex: 2025-12-12 vira "20251212"
@@ -185,7 +204,7 @@ export const cadastrar = async (req, res) => {
           INSERT INTO users (nome, email, senha, role, plano)
           VALUES ($1, $2, $3, 'responsavel', 'premium') 
           RETURNING id
-      `;
+        `;
         const userResult = await client.query(insertUserQuery, [
           responsavel,
           email_responsavel,
@@ -194,27 +213,28 @@ export const cadastrar = async (req, res) => {
         userId = userResult.rows[0].id;
       }
 
-      // D. Criar o VÍNCULO (Responsaveis_Alunos)
+      // D. Criar o VÍNCULO (Responsaveis_Alunos) se ainda não existir para este aluno
+      // (Embora seja novo aluno, é bom garantir)
       await client.query(
-        "INSERT INTO responsaveis_alunos (responsavel_id, aluno_id, parentesco) VALUES ($1, $2, $3)",
+        "INSERT INTO responsaveis_alunos (responsavel_id, aluno_id, parentesco) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
         [userId, novoAluno.id, "Responsável"]
       );
 
       dadosAcesso = {
         email: email_responsavel,
-        msg: "Acesso Premium criado!",
+        msg: "Acesso Premium criado/vinculado!",
       };
     }
 
     // --- FIM DA TRANSAÇÃO ---
     await client.query("COMMIT");
 
-    console.log("Data de matrícula recebida:", data_matricula);
+    console.log("Aluno cadastrado:", novoAluno.id);
 
     res.status(201).json({
       message: "Aluno cadastrado com sucesso.",
       student: formatDates(novoAluno),
-      acesso: dadosAcesso, // Retorna info se criou acesso ou não
+      acesso: dadosAcesso,
     });
   } catch (error) {
     await client.query("ROLLBACK"); // Cancela tudo se der erro
@@ -234,15 +254,6 @@ export const atualizar = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // --- INÍCIO DA TRANSAÇÃO ---
-    await client.query("BEGIN");
-
-    const alunoExistente = await Model.getStudentById(table, id);
-    if (!alunoExistente) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Aluno não encontrado." });
-    }
-
     const {
       // Dados Aluno
       nome,
@@ -255,12 +266,22 @@ export const atualizar = async (req, res) => {
       turno,
       observacao,
       status,
-      // Dados de Acesso (Upgrade)
+      // Dados de Acesso (Upgrade/Downgrade)
       plano,
       email_responsavel,
     } = req.body;
 
+    // --- INÍCIO DA TRANSAÇÃO ---
+    await client.query("BEGIN");
+
+    const alunoExistente = await Model.getStudentById(table, id);
+    if (!alunoExistente) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Aluno não encontrado." });
+    }
+
     // 1. Atualizar dados do ALUNO (Tabela alunos)
+    // Prepara objeto de dados dinamicamente
     const data = {};
     if (nome !== undefined) data.nome = nome.trim();
     if (data_nascimento !== undefined) data.data_nascimento = data_nascimento;
@@ -277,13 +298,16 @@ export const atualizar = async (req, res) => {
     if (turno !== undefined) data.turno = turno.trim();
     if (observacao !== undefined) data.observacao = observacao;
     if (status !== undefined) data.status = status.trim();
+    if (plano !== undefined) data.plano = plano; // Atualiza plano na tabela alunos também
 
     // Chama o Model antigo para atualizar a tabela de alunos
+    // Nota: Model.updateStudent precisa suportar atualização parcial ou você precisa passar todos os campos
+    // Aqui assumo que o seu Model lida bem com o objeto 'data'
     const alunoAtualizado = await Model.updateStudent(table, id, data);
 
-    // 2. LÓGICA DE ATUALIZAÇÃO DO PLANO (Tabela users)
+    // 2. LÓGICA DE ATUALIZAÇÃO DO PLANO/USUÁRIO (Tabela users)
     if (plano) {
-      // A. Descobrir quem é o responsável por este aluno
+      // A. Descobrir se já existe um responsável vinculado
       const vinculo = await client.query(
         "SELECT responsavel_id FROM responsaveis_alunos WHERE aluno_id = $1",
         [id]
@@ -292,32 +316,41 @@ export const atualizar = async (req, res) => {
       let userId = null;
 
       if (vinculo.rows.length > 0) {
-        // CENÁRIO 1: Já existe um vínculo, vamos atualizar esse usuário
+        // CENÁRIO 1: Já existe um vínculo
         userId = vinculo.rows[0].responsavel_id;
 
         if (plano === "premium") {
-          // Se virou Premium, atualizamos email e plano
+          // UPGRADE: Atualizamos email (se fornecido) e plano
           if (email_responsavel) {
             await client.query(
               "UPDATE users SET plano = 'premium', email = $1 WHERE id = $2",
               [email_responsavel, userId]
             );
           } else {
+            // Se não forneceu email, apenas garante que é premium
             await client.query(
               "UPDATE users SET plano = 'premium' WHERE id = $1",
               [userId]
             );
           }
         } else {
-          // Se virou Básico (Downgrade), só muda o plano (não apaga o user pra manter histórico)
+          // DOWNGRADE: Se virou Padrão/Básico
+          // Opcional: Manter o usuário como 'basico' ou remover acesso?
+          // Geralmente mantém como básico para histórico, mas sem acesso a features premium
           await client.query(
             "UPDATE users SET plano = 'basico' WHERE id = $1",
             [userId]
           );
         }
-      } else if (plano === "premium" && email_responsavel) {
-        // CENÁRIO 2: Aluno existe, virou Premium, mas NÃO tinha login ainda.
-        // Precisamos criar o usuário do zero (Igual no Cadastrar)
+      } else if (plano === "premium") {
+        // CENÁRIO 2: Aluno virou Premium, mas NÃO tinha vínculo (login) ainda.
+        // Precisamos criar o usuário ou vincular a um existente
+
+        if (!email_responsavel) {
+          throw new Error(
+            "Email do responsável é obrigatório para upgrade Premium."
+          );
+        }
 
         // Verifica se email já existe
         const userCheck = await client.query(
@@ -326,19 +359,22 @@ export const atualizar = async (req, res) => {
         );
 
         if (userCheck.rows.length > 0) {
-          // Pai já tem conta, só vincula
+          // Pai já tem conta, vincula e garante premium
           userId = userCheck.rows[0].id;
           await client.query(
             "UPDATE users SET plano = 'premium' WHERE id = $1",
             [userId]
           );
         } else {
-          // Cria novo User
+          // Cria novo User do zero
           let senhaLimpa = "123456";
-          // Tenta pegar a data de nascimento do body ou do aluno existente
+          // Tenta pegar a data de nascimento atualizada ou a antiga
           const dNasc = data_nascimento || alunoExistente.data_nascimento;
           if (dNasc) {
-            senhaLimpa = dNasc.toString().replace(/[^0-9]/g, ""); // Apenas números
+            // Formata a data para remover caracteres não numéricos
+            const dataStr =
+              dNasc instanceof Date ? dNasc.toISOString().split("T")[0] : dNasc;
+            senhaLimpa = dataStr.replace(/[^0-9]/g, "");
           }
 
           const salt = await bcrypt.genSalt(10);
@@ -346,7 +382,7 @@ export const atualizar = async (req, res) => {
 
           const newUser = await client.query(
             `INSERT INTO users (nome, email, senha, role, plano) 
-                    VALUES ($1, $2, $3, 'responsavel', 'premium') RETURNING id`,
+             VALUES ($1, $2, $3, 'responsavel', 'premium') RETURNING id`,
             [
               responsavel || alunoExistente.responsavel,
               email_responsavel,
@@ -356,7 +392,7 @@ export const atualizar = async (req, res) => {
           userId = newUser.rows[0].id;
         }
 
-        // Cria o Vínculo que faltava
+        // Cria o Vínculo
         await client.query(
           "INSERT INTO responsaveis_alunos (responsavel_id, aluno_id, parentesco) VALUES ($1, $2, 'Responsável')",
           [userId, id]
@@ -373,7 +409,9 @@ export const atualizar = async (req, res) => {
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("❌ Erro ao atualizar aluno:", error.message);
-    res.status(500).json({ error: "Erro ao atualizar aluno no banco" });
+    res
+      .status(500)
+      .json({ error: error.message || "Erro ao atualizar aluno no banco" });
   } finally {
     client.release();
   }
@@ -383,6 +421,7 @@ export const atualizar = async (req, res) => {
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;
+    // Model deve lidar com a deleção (e idealmente com constraints de chave estrangeira via ON DELETE CASCADE no banco)
     const alunoDeletado = await Model.deleteStudent(table, id);
 
     if (!alunoDeletado) {
@@ -412,12 +451,15 @@ export const criarAcessoPai = async (req, res) => {
 
     if (!email || !senha)
       return res.status(400).json({ message: "Email e senha obrigatórios." });
-    if (!["basico", "premium"].includes(plano))
+
+    // Validação básica de plano permitidos
+    const planosValidos = ["basico", "padrao", "premium"];
+    if (plano && !planosValidos.includes(plano))
       return res.status(400).json({ message: "Plano inválido." });
 
     await client.query("BEGIN");
 
-    // Verifica usuário
+    // Verifica usuário por email
     const userCheck = await client.query(
       "SELECT id FROM users WHERE email = $1",
       [email]
@@ -426,23 +468,24 @@ export const criarAcessoPai = async (req, res) => {
 
     if (userCheck.rows.length > 0) {
       usuarioId = userCheck.rows[0].id;
-      // Atualiza para premium se necessário
+      // Se usuário já existe, atualizamos o plano se for premium
       if (plano === "premium") {
         await client.query("UPDATE users SET plano = 'premium' WHERE id = $1", [
           usuarioId,
         ]);
       }
     } else {
+      // Cria novo usuário
       const salt = await bcrypt.genSalt(10);
       const senhaHash = await bcrypt.hash(senha, salt);
       const novoUser = await client.query(
         `INSERT INTO users (nome, email, senha, role, plano) VALUES ($1, $2, $3, 'responsavel', $4) RETURNING id`,
-        [nome, email, senhaHash, plano]
+        [nome, email, senhaHash, plano || "padrao"]
       );
       usuarioId = novoUser.rows[0].id;
     }
 
-    // Cria vínculo
+    // Cria vínculo (evita duplicidade)
     const vinculoCheck = await client.query(
       "SELECT id FROM responsaveis_alunos WHERE responsavel_id = $1 AND aluno_id = $2",
       [usuarioId, id]
@@ -462,5 +505,32 @@ export const criarAcessoPai = async (req, res) => {
     res.status(500).json({ error: "Erro ao criar acesso." });
   } finally {
     client.release();
+  }
+};
+
+// Listar APENAS os filhos do usuário logado
+export const listarMeusFilhos = async (req, res) => {
+  try {
+    // Pega ID do responsável do token JWT (middleware auth)
+    const idResponsavel = req.userId;
+
+    if (!idResponsavel) {
+      return res.status(401).json({ error: "Usuário não autenticado." });
+    }
+
+    // console.log("Buscando filhos para o Responsável ID:", idResponsavel);
+
+    const query = `
+      SELECT a.* FROM alunos a
+      JOIN responsaveis_alunos ra ON a.id = ra.aluno_id
+      WHERE ra.responsavel_id = $1
+    `;
+
+    const result = await pool.query(query, [idResponsavel]);
+
+    res.status(200).json(result.rows.map(formatDates));
+  } catch (error) {
+    console.error("❌ Erro ao buscar meus filhos:", error.message);
+    res.status(500).json({ error: "Erro ao buscar alunos vinculados." });
   }
 };

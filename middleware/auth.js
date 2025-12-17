@@ -13,6 +13,7 @@ const auth = (req, res, next) => {
     const decoded = jwt.verify(token.replace("Bearer ", ""), JWT_SECRET);
     req.userId = decoded.id; // <- vem do backend de usuários
     req.userEmail = decoded.email;
+    req.userRole = decoded.role;
     next();
   } catch (error) {
     return res.status(401).json({ message: "Token inválido" });

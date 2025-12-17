@@ -1,4 +1,3 @@
-// src/routes/dashboard.js
 import { Router } from "express";
 import { pool } from "../db.js";
 import auth from "../middleware/auth.js";
@@ -9,16 +8,34 @@ router.use(auth);
 // GET /dashboard?mes=11&ano=2024
 router.get("/", async (req, res) => {
   try {
+    // --- 🛡️ BLINDAGEM DE DATA  ---
+    const hoje = new Date();
     let { mes, ano } = req.query;
 
-    // Garante que mes e ano sejam números para o SQL
+    // Se não vier nada ou vier "undefined", usa a data de hoje
+    if (!mes || mes === "undefined") {
+      mes = hoje.getMonth() + 1; // JS conta meses de 0 a 11
+    }
+    if (!ano || ano === "undefined") {
+      ano = hoje.getFullYear();
+    }
+
+    // Garante que sejam números para cálculos
     const mesNum = Number(mes);
     const anoNum = Number(ano);
 
-    // Define inicio e fim para consultas de intervalo (Lançamentos)
-    const firstDay = `${ano}-${mes}-01`;
+    // Formata o mês para ter 2 dígitos (ex: 5 vira "05") para a string de data
+    const mesString = String(mesNum).padStart(2, "0");
+
+    // Define inicio e fim para consultas de intervalo
+    const firstDay = `${anoNum}-${mesString}-01`;
     // Pega o último dia do mês dinamicamente
-    const lastDay = `${ano}-${mes}-${new Date(anoNum, mesNum, 0).getDate()}`;
+    const lastDay = `${anoNum}-${mesString}-${new Date(
+      anoNum,
+      mesNum,
+      0
+    ).getDate()}`;
+    // --------------------------------------------------
 
     // 1️⃣ Quantidade de alunos ativos (Snapshot - Independe do mês)
     const { rows: alunosRows } = await pool.query(`
@@ -48,7 +65,7 @@ router.get("/", async (req, res) => {
       (r) => (alunos_por_turno[r.turno] = Number(r.quantidade))
     );
 
-    // 4️⃣ Saldo de caixa no período (CORRIGIDO: Já estava certo, usa firstDay/lastDay)
+    // 4️⃣ Saldo de caixa no período
     const { rows: caixaRows } = await pool.query(
       `
       SELECT
@@ -62,8 +79,7 @@ router.get("/", async (req, res) => {
     );
     const saldo_caixa = Number(caixaRows[0].saldo || 0);
 
-    // 5️⃣ Aniversariantes do mês SELECIONADO (CORRIGIDO)
-    // Antes usava CURRENT_DATE, agora usa $1 (mesNum)
+    // 5️⃣ Aniversariantes do mês SELECIONADO
     const { rows: aniversariantesRows } = await pool.query(
       `
       SELECT nome, data_nascimento
@@ -85,7 +101,7 @@ router.get("/", async (req, res) => {
       mensalidadesRows[0].saldo_previsto || 0
     );
 
-    // 7️⃣ Aniversariantes Professores (CORRIGIDO)
+    // 7️⃣ Aniversariantes Professores
     const { rows: professoresAniversariantesRows } = await pool.query(
       `
       SELECT nome, data_nascimento
@@ -105,8 +121,7 @@ router.get("/", async (req, res) => {
     `);
     const saldo_previsto_salarios = Number(salariosRows[0].total_salarios || 0);
 
-    // 9️⃣ Matriculados no mês SELECIONADO (CORRIGIDO)
-    // Agora verifica se a matrícula foi no mês/ano do filtro
+    // 9️⃣ Matriculados no mês SELECIONADO
     const { rows: matriculadosRows } = await pool.query(
       `
       SELECT COUNT(*) AS quantidade
@@ -120,11 +135,7 @@ router.get("/", async (req, res) => {
 
     const matriculados_mes_atual = Number(matriculadosRows[0].quantidade || 0);
 
-    // 🔟 Inadimplentes do mês SELECIONADO (CORRIGIDO E MELHORADO)
-    // A lógica aqui deve buscar na tabela 'receitas' pelo mes_referencia e ano_referencia
-    // Se você não tiver essas colunas, use data_pagamento, mas referência é o ideal para mensalidade.
-    // Assumindo que sua tabela receitas tem 'mes_referencia' e 'ano_referencia' (como fizemos no front):
-
+    // 🔟 Inadimplentes do mês SELECIONADO
     const { rows: inadimplentesRows } = await pool.query(
       `
       SELECT id, nome, valor_mensalidade, telefone
@@ -141,13 +152,6 @@ router.get("/", async (req, res) => {
       [mesNum, anoNum]
     );
 
-    /* ⚠️ NOTA: Se o seu banco NÃO tiver as colunas mes_referencia/ano_referencia na tabela 'receitas',
-       use a versão abaixo baseada na data do pagamento:
-       
-       AND EXTRACT(MONTH FROM data_pagamento) = $1
-       AND EXTRACT(YEAR FROM data_pagamento) = $2
-    */
-
     res.json({
       alunos_ativos,
       professores_ativos,
@@ -161,7 +165,7 @@ router.get("/", async (req, res) => {
       inadimplentes: inadimplentesRows,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Erro Dashboard:", err.message); // Log melhorado
     res.status(500).json({ error: "Erro ao carregar dados do dashboard" });
   }
 });
