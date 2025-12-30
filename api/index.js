@@ -53,7 +53,7 @@ if (!process.env.JWT_SECRET) {
 
 app.use(
   cors({
-    origin: [["http://localhost:5174"], ["https://back-end-reforco-production.up.railway.app/login"]],
+    origin: [["http://localhost:5174"], ["https://sistema-escolar-juh.vercel.app/login"]],
     credentials: true,
   })
 );
