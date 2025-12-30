@@ -20,18 +20,4 @@ Thumbs.db
 
 # Deployment / Vercel
 .vercel
-<<<<<<< HEAD
-.vercelignore
-
-# IDEs / editors
-.vscode/
-.idea/
-*.sublime-workspace
-*.sublime-project
-
-# Build / output directories
-dist/
-build/
-=======
 .env
->>>>>>> 27efdeb30957dab60549549ed33df3ac77295e63

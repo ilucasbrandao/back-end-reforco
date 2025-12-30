@@ -32,7 +32,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 🔥 DEFINIÇÃO ABSOLUTA DA PASTA DE UPLOADS
-// Garante que o caminho seja sempre: .../backend/api/uploads
 const UPLOADS_FOLDER = path.join(__dirname, "uploads");
 
 // Garante que a pasta existe ao iniciar
@@ -54,7 +53,7 @@ if (!process.env.JWT_SECRET) {
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5174"],
     credentials: true,
   })
 );
