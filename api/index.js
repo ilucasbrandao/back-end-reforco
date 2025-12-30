@@ -92,16 +92,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.post("/upload", upload.array("files"), (req, res) => {
-  console.log("📥 Recebendo upload...");
 
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: "Nenhum arquivo enviado." });
     }
-
-    console.log(
-      `✅ ${req.files.length} arquivo(s) salvos em: ${UPLOADS_FOLDER}`
-    );
 
     const fileUrls = req.files.map((file) => {
       return `${req.protocol}://${req.get("host")}/uploads/${file.filename}`;
