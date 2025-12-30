@@ -51,17 +51,27 @@ if (!process.env.JWT_SECRET) {
 // 2. MIDDLEWARES GLOBAIS (A ORDEM IMPORTA!)
 // =========================================================================
 
+const allowedOrigins = [
+  "http://localhost:5174",
+  "https://sistema-escolar-juh.vercel.app"
+];
+
 app.use(
   cors({
-    origin: [["http://localhost:5174"], ["https://sistema-escolar-juh.vercel.app/login"]],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
 
+
 app.use(express.json());
 
-// 🟢 1º: TORNAR A PASTA PÚBLICA (Sem senha, antes de tudo)
-// Agora usa a variável UPLOADS_FOLDER para ter certeza absoluta do local
 app.use("/uploads", express.static(UPLOADS_FOLDER));
 
 // =========================================================================
@@ -94,7 +104,6 @@ app.post("/upload", upload.array("files"), (req, res) => {
     );
 
     const fileUrls = req.files.map((file) => {
-      // Gera o link público
       return `${req.protocol}://${req.get("host")}/uploads/${file.filename}`;
     });
 
