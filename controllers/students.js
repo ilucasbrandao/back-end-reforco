@@ -534,3 +534,44 @@ export const listarMeusFilhos = async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar alunos vinculados." });
   }
 };
+
+export const atualizarFotoAluno = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const responsavelId = req.userId;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "Nenhuma foto enviada." });
+    }
+
+    // 🔐 Verifica se o aluno pertence ao responsável
+    const vinculo = await pool.query(
+      `
+      SELECT 1
+      FROM responsaveis_alunos
+      WHERE aluno_id = $1 AND responsavel_id = $2
+      `,
+      [id, responsavelId]
+    );
+
+    if (vinculo.rowCount === 0) {
+      return res
+        .status(403)
+        .json({ error: "Sem permissão para alterar este aluno." });
+    }
+
+    const fotoUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/uploads/alunos/fotos/${req.file.filename}`;
+
+    await pool.query("UPDATE alunos SET foto_url = $1 WHERE id = $2", [
+      fotoUrl,
+      id,
+    ]);
+
+    res.status(200).json({ foto_url: fotoUrl });
+  } catch (error) {
+    console.error("❌ Erro ao atualizar foto do aluno:", error.message);
+    res.status(500).json({ error: "Erro ao atualizar foto do aluno." });
+  }
+};

@@ -3,6 +3,7 @@ node_modules/
 
 # Environment variables
 .env
+.env.production
 .env.local
 .env.*.local
 
@@ -21,3 +22,6 @@ Thumbs.db
 # Deployment / Vercel
 .vercel
 .env
+
+# Scrips admininistrativos
+scripts/resetAdminPassword.js
