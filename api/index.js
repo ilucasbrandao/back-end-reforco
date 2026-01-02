@@ -1,5 +1,5 @@
-import "../config/env.js"; // se esse arquivo só valida env
 import express from "express";
+import dotenv from "dotenv";
 import cors from "cors";
 import fs from "fs";
 import { UPLOADS_ROOT } from "../config/uploads.js";
