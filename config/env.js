@@ -1,5 +1,9 @@
-import dotenv from "dotenv";
+if (process.env.NODE_ENV !== "production") {
+  const dotenv = await import("dotenv");
+  dotenv.config();
+}
 
-dotenv.config({
-  path: process.env.NODE_ENV === "production" ? ".env.production" : ".env",
-});
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET não definido");
+  process.exit(1);
+}
