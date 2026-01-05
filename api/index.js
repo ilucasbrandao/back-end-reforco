@@ -1,14 +1,12 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import path from "path";
-import multer from "multer";
-import { fileURLToPath } from "url";
-import fs from "fs"; // Importante para verificar a pasta
+import fs from "fs";
+import { UPLOADS_ROOT } from "../config/uploads.js";
 
 // --- Importações Internas ---
-import { pool } from "../db.js";
 import auth from "../middleware/auth.js";
+import { createUploadMiddleware } from "../middleware/upload.js";
 
 // --- Rotas ---
 import authRoutes from "../routes/auth.js";
@@ -22,24 +20,14 @@ import inadiplentesRouter from "../routes/inadimplentes.js";
 import fecharCaixa from "../routes/caixa.js";
 import resumoDashboard from "../routes/dashboard.js";
 import relatorioRoutes from "../routes/relatorio.js";
+import { createUploadRoutes } from "../routes/upload.js";
 
 // =========================================================================
-// 1. CONFIGURAÇÕES & CAMINHOS
+// 1. CONFIGURAÇÕES
 // =========================================================================
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 🔥 DEFINIÇÃO ABSOLUTA DA PASTA DE UPLOADS
-// Garante que o caminho seja sempre: .../backend/api/uploads
-const UPLOADS_FOLDER = path.join(__dirname, "uploads");
-
-// Garante que a pasta existe ao iniciar
-if (!fs.existsSync(UPLOADS_FOLDER)) {
-  fs.mkdirSync(UPLOADS_FOLDER);
-  console.log("📁 Pasta 'uploads' criada automaticamente.");
-}
+dotenv.config({
+  path: process.env.NODE_ENV === "production" ? ".env.production" : ".env",
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -49,70 +37,45 @@ if (!process.env.JWT_SECRET) {
 }
 
 // =========================================================================
-// 2. MIDDLEWARES GLOBAIS (A ORDEM IMPORTA!)
+// 2. MIDDLEWARES GLOBAIS
 // =========================================================================
+
+const allowedOrigins = [process.env.FRONTEND_URL, "http://localhost:5173"];
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
 
 app.use(express.json());
 
-// 🟢 1º: TORNAR A PASTA PÚBLICA (Sem senha, antes de tudo)
-// Agora usa a variável UPLOADS_FOLDER para ter certeza absoluta do local
-app.use("/uploads", express.static(UPLOADS_FOLDER));
+// 📂 Arquivos estáticos (IMAGENS)
+app.use("/uploads", express.static(UPLOADS_ROOT));
 
 // =========================================================================
-// 3. SERVIÇO DE UPLOAD (MULTER)
+// 3. ROTAS
 // =========================================================================
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Usa a MESMA variável do express.static
-    cb(null, UPLOADS_FOLDER);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${file.originalname.replace(/\s/g, "")}`;
-    cb(null, uniqueName);
-  },
-});
+// Upload genérico (se você ainda usa)
+const uploadMiddleware = createUploadMiddleware(UPLOADS_ROOT);
+app.use("/upload", createUploadRoutes(uploadMiddleware));
 
-const upload = multer({ storage });
-
-app.post("/upload", upload.array("files"), (req, res) => {
-  console.log("📥 Recebendo upload...");
-
-  try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: "Nenhum arquivo enviado." });
-    }
-
-    console.log(
-      `✅ ${req.files.length} arquivo(s) salvos em: ${UPLOADS_FOLDER}`
-    );
-
-    const fileUrls = req.files.map((file) => {
-      // Gera o link público
-      return `${req.protocol}://${req.get("host")}/uploads/${file.filename}`;
-    });
-
-    res.json({ urls: fileUrls });
-  } catch (error) {
-    console.error("❌ Erro upload:", error);
-    res.status(500).json({ error: "Falha ao realizar upload." });
-  }
-});
-
-// =========================================================================
-// 4. ROTAS (Protegidas)
-// =========================================================================
-
+// Autenticação
 app.use("/", authRoutes);
+
+// Cadastro
 app.use("/alunos", routeAlunos);
 app.use("/professores", auth, routeProfessores);
+
+// Feedbacks
 app.use("/feedbacks", feedbackRoutes);
 
 // Financeiro
@@ -127,14 +90,31 @@ app.use("/dashboard", resumoDashboard);
 app.use("/", relatorioRoutes);
 
 // =========================================================================
+// 4. ERROS GLOBAIS
+// =========================================================================
+import multer from "multer";
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (err.message === "Apenas imagens são permitidas") {
+    return res.status(400).json({ error: err.message });
+  }
+
+  console.error("Erro não tratado:", err);
+  res.status(500).json({ error: "Erro interno do servidor" });
+});
+
+// =========================================================================
 // 5. START
 // =========================================================================
-
 app.listen(PORT, () => {
   console.log(`
-  ╭──────────────────────────────────────────────────╮
-  │   🚀 Servidor rodando: http://localhost:${PORT}    │
-  │   📂 Pasta Real:       ${UPLOADS_FOLDER}   │
-  ╰──────────────────────────────────────────────────╯
-  `);
+╭──────────────────────────────────────────────────╮
+│ 🚀 Servidor rodando: http://localhost:${PORT}     │
+│ 📂 Pasta uploads:   ${UPLOADS_ROOT}               │
+╰──────────────────────────────────────────────────╯
+`);
 });

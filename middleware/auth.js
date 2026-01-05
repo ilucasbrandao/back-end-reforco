@@ -1,22 +1,28 @@
-import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "minha_chave_secreta";
+import { verifyToken } from "../utils/jwt.js";
 
 const auth = (req, res, next) => {
-  const token = req.headers.authorization;
+  const authHeader = req.headers.authorization;
 
-  if (!token) {
-    return res.status(401).json({ message: "Acesso negado" });
+  if (!authHeader) {
+    return res.status(401).json({ message: "Token não fornecido" });
   }
 
+  if (!authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Token mal formatado" });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+
   try {
-    const decoded = jwt.verify(token.replace("Bearer ", ""), JWT_SECRET);
-    req.userId = decoded.id; // <- vem do backend de usuários
+    const decoded = verifyToken(token);
+
+    req.userId = decoded.id;
     req.userEmail = decoded.email;
     req.userRole = decoded.role;
+
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Token inválido" });
+    return res.status(401).json({ message: "Token inválido ou expirado" });
   }
 };
 

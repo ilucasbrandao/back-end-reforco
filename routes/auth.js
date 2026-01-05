@@ -1,23 +1,25 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
 import { pool } from "../db.js";
+import { signToken } from "../utils/jwt.js";
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET;
 
 router.post("/login", async (req, res) => {
   try {
     const { email, senha } = req.body;
 
-    console.log("--- TENTATIVA DE LOGIN ---");
-    console.log("Email recebido:", email);
-    console.log("Senha recebida:", senha);
+    if (!email || !senha) {
+      return res
+        .status(400)
+        .json({ message: "Email e senha são obrigatórios" });
+    }
 
-    // 1. Busca usuário pelo email na tabela users (Admin, Prof ou Responsável)
-    const usuario = await pool.query("SELECT * FROM users WHERE email = $1", [
-      email,
-    ]);
+    // 1. Busca usuário
+    const usuario = await pool.query(
+      "SELECT id, nome, email, senha, role, plano FROM users WHERE email = $1",
+      [email]
+    );
 
     if (usuario.rows.length === 0) {
       return res.status(401).json({ message: "Usuário ou senha incorretos" });
@@ -25,15 +27,14 @@ router.post("/login", async (req, res) => {
 
     const user = usuario.rows[0];
 
-    // 2. Verificar a senha
+    // 2. Verifica senha
     const senhaValida = await bcrypt.compare(senha, user.senha);
 
     if (!senhaValida) {
       return res.status(401).json({ message: "Usuário ou senha incorretos" });
     }
 
-    // 3. REGRA DE NEGÓCIO: Bloqueio do Plano Básico
-    // Se for Responsável E o plano for 'basico', bloqueia.
+    // 3. Regra de plano
     if (user.role === "responsavel" && user.plano === "basico") {
       return res.status(403).json({
         message:
@@ -41,18 +42,14 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // 4. Gerar Token (Incluindo a ROLE para o Front saber quem é)
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role, // 'admin', 'professor' ou 'responsavel'
-      },
-      JWT_SECRET,
-      { expiresIn: "5d" }
-    );
+    // 4. Gera token (centralizado)
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
 
-    // 5. Retornar dados
+    // 5. Retorno
     res.json({
       message: "Login realizado com sucesso",
       token,
@@ -64,7 +61,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Erro no login:", err.message);
+    console.error("Erro no login:", err);
     res.status(500).json({ message: "Erro interno no servidor" });
   }
 });
