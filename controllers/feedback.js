@@ -15,7 +15,7 @@ export const FeedbackController = {
       if (req.userRole === "responsavel") {
         const check = await pool.query(
           `SELECT 1 FROM responsaveis_alunos
-           WHERE responsavel_id = $1 AND aluno_id = $2`,
+            WHERE responsavel_id = $1 AND aluno_id = $2`,
           [req.userId, id]
         );
 
@@ -29,16 +29,28 @@ export const FeedbackController = {
       const result = await FeedbackModel.listarPorAluno(id);
 
       // 🛡️ Defesa + normalização de dados
-      const rows = result.rows.map((item) => ({
-        ...item,
-        avaliacao_pedagogica: item.avaliacao_pedagogica || {},
-        avaliacao_psico: item.avaliacao_psico || {},
-        fotos:
-          typeof item.fotos === "string"
-            ? JSON.parse(item.fotos)
-            : item.fotos || [],
-        lido_pelos_pais: item.lido_pelos_pais ?? false,
-      }));
+      const rows = result.rows.map((item) => {
+        let fotos = [];
+        try {
+            // Lidar com casos onde fotos pode ser uma string ou já um objeto/array
+            if (typeof item.fotos === "string") {
+                fotos = JSON.parse(item.fotos);
+            } else if (Array.isArray(item.fotos)) {
+                fotos = item.fotos;
+            }
+        } catch (e) {
+            console.error("Erro ao analisar fotos do feedback:", item.id, e);
+            fotos = [];
+        }
+
+        return {
+            ...item,
+            avaliacao_pedagogica: item.avaliacao_pedagogica || {},
+            avaliacao_psico: item.avaliacao_psico || {},
+            fotos: fotos,
+            lido_pelos_pais: item.lido_pelos_pais ?? false,
+        };
+      });
 
       res.json(rows);
     } catch (error) {
@@ -68,24 +80,43 @@ export const FeedbackController = {
         avaliacao_pedagogica,
         avaliacao_psico,
         observacao,
+        fotos_existentes
       } = req.body;
 
-      // 🔁 Como veio via FormData, precisamos converter
-      const pedagogicoParsed = avaliacao_pedagogica
-        ? JSON.parse(avaliacao_pedagogica)
-        : {};
-
-      const psicoParsed = avaliacao_psico ? JSON.parse(avaliacao_psico) : {};
+      // 🔁 Como veio via FormData, converte strings JSON para objetos
+      let pedagogicoParsed = {};
+      let psicoParsed = {};
+      
+      try {
+          pedagogicoParsed = avaliacao_pedagogica ? JSON.parse(avaliacao_pedagogica) : {};
+          psicoParsed = avaliacao_psico ? JSON.parse(avaliacao_psico) : {};
+      } catch (e) {
+          console.error("Erro ao analisar campos JSON:", e);
+          return res.status(400).json({ error: "Formato JSON inválido para campos de avaliação." });
+      }
 
       // ==========================
       // 2. IMAGENS (MULTER)
       // ==========================
-      const fotos =
+      const novasFotos =
         req.files?.map((file) => {
           return `${req.protocol}://${req.get(
             "host"
           )}/uploads/feedbacks/imagens/${file.filename}`;
         }) || [];
+        
+      // Combinar com fotos existentes se necessário
+      let fotosFinais = [...novasFotos];
+       if (fotos_existentes) {
+          try {
+             const existentes = JSON.parse(fotos_existentes);
+             if (Array.isArray(existentes)) {
+                fotosFinais = [...existentes, ...fotosFinais];
+             }
+          } catch(e) {
+             console.error("Erro ao analisar fotos existentes:", e);
+          }
+       }
 
       // ==========================
       // 3. SALVAR NO BANCO
@@ -96,7 +127,7 @@ export const FeedbackController = {
         bimestre,
         avaliacao_pedagogica: pedagogicoParsed,
         avaliacao_psico: psicoParsed,
-        fotos,
+        fotos: fotosFinais,
         observacao,
       });
 
@@ -125,9 +156,56 @@ export const FeedbackController = {
   // ======================================================
   async atualizar(req, res) {
     try {
-      const data = feedbackUpdateSchema.parse(req.body);
+     
+      const {
+          bimestre,
+          avaliacao_pedagogica,
+          avaliacao_psico,
+          observacao,
+          fotos_existentes
+      } = req.body;
 
-      const result = await FeedbackModel.atualizar(req.params.id, data);
+      // Converter campos JSON
+      let pedagogicoParsed = {};
+      let psicoParsed = {};
+      
+      try {
+          pedagogicoParsed = avaliacao_pedagogica ? JSON.parse(avaliacao_pedagogica) : {};
+          psicoParsed = avaliacao_psico ? JSON.parse(avaliacao_psico) : {};
+      } catch (e) {
+          console.error("Erro ao analisar campos JSON:", e);
+          return res.status(400).json({ error: "Formato JSON inválido." });
+      }
+
+      // Lidar com Novas Imagens
+      const novasFotos = req.files?.map((file) => {
+          return `${req.protocol}://${req.get(
+            "host"
+          )}/uploads/feedbacks/imagens/${file.filename}`;
+      }) || [];
+
+      // Lidar com Imagens Existentes
+      let fotosFinais = [...novasFotos];
+      if (fotos_existentes) {
+          try {
+             const existentes = JSON.parse(fotos_existentes);
+             if (Array.isArray(existentes)) {
+                fotosFinais = [...existentes, ...fotosFinais];
+             }
+          } catch(e) {
+             console.error("Erro ao analisar fotos existentes:", e);
+          }
+      }
+
+      const dataToUpdate = {
+          bimestre,
+          avaliacao_pedagogica: pedagogicoParsed,
+          avaliacao_psico: psicoParsed,
+          observacao,
+          fotos: fotosFinais
+      };
+
+      const result = await FeedbackModel.atualizar(req.params.id, dataToUpdate);
 
       if (result.rowCount === 0) {
         return res.status(404).json({ error: "Relatório não encontrado." });

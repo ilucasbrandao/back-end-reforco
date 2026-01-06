@@ -1,10 +1,5 @@
 import express from "express";
 import auth from "../middleware/auth.js";
-import { validateSchema } from "../middleware/validateSchema.js";
-import {
-  feedbackCreateSchema,
-  feedbackUpdateSchema,
-} from "../schemas/feedback.js";
 import { FeedbackController } from "../controllers/feedback.js";
 
 // Path
@@ -13,13 +8,13 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { UPLOADS_ROOT } from "../config/uploads.js";
 import { createUploadMiddleware } from "../middleware/upload.js";
 
+// Configuração do Upload
 const uploadFeedbackImagens = createUploadMiddleware(
-  path.join(__dirname, "../uploads/feedbacks/imagens"),
+  path.join(__dirname, "../uploads/feedbacks/imagens"), 
   {
-    allowedMimeTypes: ["image/"],
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/jpg", "image/webp"], 
     maxSizeMB: 5,
     maxFiles: 10,
   }
@@ -42,7 +37,7 @@ router.post(
 // ATUALIZAR
 router.put(
   "/:id",
-  validateSchema(feedbackUpdateSchema),
+  uploadFeedbackImagens.array("imagens", 10), 
   FeedbackController.atualizar
 );
 
