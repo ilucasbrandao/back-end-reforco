@@ -15,7 +15,7 @@ const uploadFeedbackImagens = createUploadMiddleware(
   path.join(__dirname, "../uploads/feedbacks/imagens"), 
   {
     allowedMimeTypes: ["image/jpeg", "image/png", "image/jpg", "image/webp"], 
-    maxSizeMB: 5,
+    maxSizeMB: 20,
     maxFiles: 10,
   }
 );
