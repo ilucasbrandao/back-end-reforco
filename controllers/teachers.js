@@ -1,15 +1,16 @@
-import * as Model from "../models/teachers.js";
-import * as DespesaModel from "../models/despesas.js";
-const table = "professores";
+import { PrismaClient } from "@prisma/client";
 
-// Utilitário simples para formatar datas (opcional)
+const prisma = new PrismaClient();
+
+// =========================================================================
+// FUNÇÕES AUXILIARES (DATAS)
+// =========================================================================
+
 const formatLocalDate = (date) => {
   if (!date) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return date;
-  }
   const d = new Date(date);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  // Ajuste de fuso para garantir consistência (evita que volte 1 dia)
+  d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
   return d.toISOString().split("T")[0];
 };
 
@@ -19,15 +20,23 @@ const formatDates = (professor) => {
     ...professor,
     data_nascimento: formatLocalDate(professor.data_nascimento),
     data_contratacao: formatLocalDate(professor.data_contratacao),
-    criado_em: professor.criado_em?.toISOString(),
-    atualizado_em: professor.atualizado_em?.toISOString(),
+    criado_em: professor.criado_em ? professor.criado_em.toISOString() : null,
+    atualizado_em: professor.atualizado_em
+      ? professor.atualizado_em.toISOString()
+      : null,
   };
 };
 
-//? LISTAR TODOS OS PROFESSORES
+// =========================================================================
+// CONTROLLERS
+// =========================================================================
+
+// Listar todos os professores
 export const listarProfessores = async (req, res) => {
   try {
-    const professores = await Model.getTeachersAll(table);
+    const professores = await prisma.professores.findMany({
+      orderBy: { nome: "asc" },
+    });
     res.status(200).json(professores.map(formatDates));
   } catch (error) {
     console.error("❌ Erro ao listar professores:", error.message);
@@ -35,30 +44,34 @@ export const listarProfessores = async (req, res) => {
   }
 };
 
-//? BUSCAR PROFESSOR POR ID
+// Buscar professor por ID com Despesas (Movimentações)
 export const listarProfessoresID = async (req, res) => {
   try {
     const { id } = req.params;
-    const professorRows = await Model.getTeachersById(table, id);
 
-    if (!professorRows || professorRows.length === 0) {
+    const professor = await prisma.professores.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        despesas: {
+          orderBy: { data_pagamento: "desc" },
+        },
+      },
+    });
+
+    if (!professor) {
       return res.status(404).json({ message: "Professor não encontrado!" });
     }
 
-    const professor = professorRows[0]; // 👈 pega só o objeto
-    const movimentacoes = await DespesaModel.getDespesaByProfessorId(
-      "despesas",
-      id
-    );
-
     res.json({
-      ...professor,
-      movimentacoes: movimentacoes.map((m) => ({
-        ...m,
-        data_pagamento: m.data_pagamento
-          ? new Date(m.data_pagamento).toISOString().split("T")[0]
-          : null,
-      })),
+      ...formatDates(professor),
+      movimentacoes: professor.despesas.map((m) => {
+        const d = new Date(m.data_pagamento);
+        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+        return {
+          ...m,
+          data_pagamento: d.toISOString().split("T")[0],
+        };
+      }),
     });
   } catch (error) {
     console.error("❌ Erro ao buscar professor:", error.message);
@@ -66,7 +79,7 @@ export const listarProfessoresID = async (req, res) => {
   }
 };
 
-//? CRIAR PROFESSOR
+// Cadastrar Professor
 export const cadastrarProfessor = async (req, res) => {
   try {
     const {
@@ -81,31 +94,19 @@ export const cadastrarProfessor = async (req, res) => {
       status,
     } = req.body;
 
-    const newTeacher = await Model.createTeacher(
-      table,
-      [
-        "nome",
-        "data_nascimento",
-        "telefone",
-        "endereco",
-        "data_contratacao",
-        "nivel_ensino",
-        "turno",
-        "salario",
-        "status",
-      ],
-      [
+    const newTeacher = await prisma.professores.create({
+      data: {
         nome,
-        data_nascimento,
+        data_nascimento: data_nascimento ? new Date(data_nascimento) : null,
         telefone,
         endereco,
-        data_contratacao,
+        data_contratacao: data_contratacao ? new Date(data_contratacao) : null,
         nivel_ensino,
         turno,
-        salario,
-        status,
-      ]
-    );
+        salario: salario ? parseFloat(salario) : null,
+        status: status || "ativo",
+      },
+    });
 
     res.status(201).json({
       message: "Professor(a) cadastrado com sucesso.",
@@ -117,65 +118,55 @@ export const cadastrarProfessor = async (req, res) => {
   }
 };
 
-//? ATUALIZAR PROFESSOR
+// Atualizar Professor
 export const atualizarProfessor = async (req, res) => {
   try {
     const { id } = req.params;
-    const professorExistente = await Model.getTeachersById(table, id);
-    if (!professorExistente || professorExistente.length === 0) {
-      return res.status(404).json({ message: "Professor(a) não encontrado." });
-    }
+    const data = req.body;
 
-    const {
-      nome,
-      data_nascimento,
-      telefone,
-      endereco,
-      data_contratacao,
-      nivel_ensino,
-      turno,
-      salario,
-      status,
-    } = req.body;
-
-    const professorAtualizado = await Model.updateTeacher(table, id, {
-      nome: nome?.trim() || "",
-      data_nascimento: data_nascimento || "",
-      telefone: telefone || "",
-      endereco: endereco?.trim() || "",
-      data_contratacao: data_contratacao || "",
-      nivel_ensino: nivel_ensino?.trim() || "",
-      turno: turno?.trim() || "",
-      salario: salario || "",
-      status: status?.trim() || "ativo",
+    const professorAtualizado = await prisma.professores.update({
+      where: { id: parseInt(id) },
+      data: {
+        ...data,
+        nome: data.nome?.trim(),
+        data_nascimento: data.data_nascimento
+          ? new Date(data.data_nascimento)
+          : undefined,
+        data_contratacao: data.data_contratacao
+          ? new Date(data.data_contratacao)
+          : undefined,
+        salario: data.salario ? parseFloat(data.salario) : undefined,
+        atualizado_em: new Date(),
+      },
     });
+
     res.status(200).json({
       message: "Professor(a) atualizado com sucesso",
       teacher: formatDates(professorAtualizado),
     });
   } catch (error) {
     console.error("❌ Erro ao atualizar professor(a): ", error.message);
-    res.status(500).json({ error: " Erro ao atualizar professor(a) no banco" });
+    res.status(500).json({ error: "Erro ao atualizar professor(a) no banco" });
   }
 };
 
-//? DELETAR PROFESSOR
+// Deletar Professor
 export const deletarProfessor = async (req, res) => {
   try {
     const { id } = req.params;
-    const professorDeletado = await Model.deleteTeacher(table, id);
 
-    if (!professorDeletado) {
-      return res
-        .status(404)
-        .json({ message: "Professor(a) não encontrado para exclusão" });
-    }
+    const professorDeletado = await prisma.professores.delete({
+      where: { id: parseInt(id) },
+    });
+
     res.status(200).json({
       message: "Professor(a) deletado com sucesso",
       teacher: formatDates(professorDeletado),
     });
   } catch (error) {
     console.error("❌ Erro ao deletar professor(a):", error.message);
-    res.status(500).json({ error: "Erro ao deletar professor(a) no banco" });
+    res
+      .status(500)
+      .json({ error: "Erro ao deletar professor(a) ou não encontrado." });
   }
 };

@@ -8,13 +8,14 @@
     "node": "22.x"
   },
   "scripts": {
-    "dev": "cross-env NODE_ENV=development nodemon api/index.js",
-    "prod": "cross-env NODE_ENV=production nodemon api/index.js",
-    "start": "nodemon api/index.js"
+    "build": "npx prisma generate",
+    "start": "npx prisma db push && node src/server.js",
+    "postinstall": "npx prisma generate"
   },
   "author": "Lucas Brandao",
   "license": "ISC",
   "dependencies": {
+    "@prisma/client": "^7.3.0",
     "@vercel/speed-insights": "^1.2.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "prisma": "^7.3.0"
   }
 }

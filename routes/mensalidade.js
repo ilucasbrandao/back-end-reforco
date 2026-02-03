@@ -25,6 +25,9 @@ router.get("/aluno/:alunoId/:receitaId", mensalidadeByAlunoId);
 // Buscar mensalidade por ID da mensalidade
 router.get("/:id", listarMensalidade);
 
+// Atualizar mensalidade
+router.put("/mensalidades/:id", mensalidadeController.atualizarMensalidade);
+
 // Deletar mensalidade específica de um aluno
 router.delete("/aluno/:alunoId/:receitaId", deletarMensalidadeAluno);
 

@@ -1,23 +1,44 @@
-import * as Model from "../models/mensalidade.js";
-const table = "receitas";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 
-// Utilitário simples para formatar datas de mensalidade
+// =========================================================================
+// FUNÇÕES AUXILIARES (DATAS)
+// =========================================================================
+
 const formatMensalidadeDates = (receita) => {
   if (!receita) return receita;
+
+  const adjustDate = (dateStr) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    // Ajuste de fuso para garantir consistência entre banco e visualização
+    d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+    return d.toISOString().split("T")[0];
+  };
+
   return {
     ...receita,
-    // Agora data_pagamento será igual ao criado_em
-    data_pagamento: receita.criado_em?.toISOString().split("T")[0] || null, // YYYY-MM-DD
-    criado_em: receita.criado_em?.toISOString(),
-    atualizado_em: receita.atualizado_em?.toISOString(),
+    data_pagamento: adjustDate(receita.data_pagamento),
+    criado_em: receita.criado_em
+      ? new Date(receita.criado_em).toISOString()
+      : null,
+    atualizado_em: receita.atualizado_em
+      ? new Date(receita.atualizado_em).toISOString()
+      : null,
   };
 };
 
-//? LISTAR MENSALIDADE POR ID_MENSALIDADE
+// =========================================================================
+// CONTROLLERS
+// =========================================================================
+
+// Listar mensalidade específica por ID
 export const listarMensalidade = async (req, res) => {
   try {
     const { id } = req.params;
-    const receita = await Model.getMensalidadeById(table, id);
+    const receita = await prisma.receitas.findUnique({
+      where: { id_mensalidade: parseInt(id) },
+    });
 
     if (!receita) {
       return res.status(404).json({ message: "Mensalidade não encontrada." });
@@ -25,51 +46,26 @@ export const listarMensalidade = async (req, res) => {
 
     res.status(200).json(formatMensalidadeDates(receita));
   } catch (error) {
-    console.error("❌ Erro ao listar mensalidade:", error.message);
     res.status(500).json({ error: "Erro ao buscar mensalidade" });
   }
 };
 
-//? LISTAR TODAS AS MENSALIDADES DE UM ALUNO
+// Listar todas as mensalidades de um aluno específico
 export const mensalidadeByAluno = async (req, res) => {
   try {
-    const { id } = req.params; // id do aluno
-    const receitas = await Model.getMensalidadesByAlunoId(table, id);
-
-    if (!receitas || receitas.length === 0) {
-      return res
-        .status(404)
-        .json({ message: "Nenhuma mensalidade encontrada para este aluno." });
-    }
+    const { id } = req.params; // ID do Aluno
+    const receitas = await prisma.receitas.findMany({
+      where: { id_aluno: parseInt(id) },
+      orderBy: { data_pagamento: "desc" },
+    });
 
     res.json(receitas.map(formatMensalidadeDates));
   } catch (error) {
-    console.error("❌ Erro ao buscar mensalidades por aluno:", error.message);
-    res.status(500).json({ error: "Erro ao buscar mensalidades" });
+    res.status(500).json({ error: "Erro ao buscar mensalidades do aluno." });
   }
 };
 
-//? Buscar uma mensalidade específica de um aluno
-export const mensalidadeByAlunoId = async (req, res) => {
-  try {
-    const { alunoId, receitaId } = req.params;
-    const receita = await Model.getMensalidadeById(table, receitaId);
-
-    if (!receita || receita.id_aluno != alunoId) {
-      return res
-        .status(404)
-        .json({ message: "Mensalidade não encontrada para este aluno." });
-    }
-
-    res.json(formatMensalidadeDates(receita));
-  } catch (error) {
-    console.error("❌ Erro ao buscar mensalidade do aluno:", error.message);
-    res.status(500).json({ error: "Erro ao buscar mensalidade" });
-  }
-};
-
-//? CADASTRAR MENSALIDADE
-//? CADASTRAR MENSALIDADE
+// Cadastrar nova mensalidade (com verificação de duplicidade)
 export const cadastrarMensalidade = async (req, res) => {
   try {
     const {
@@ -86,21 +82,19 @@ export const cadastrarMensalidade = async (req, res) => {
       !valor ||
       !data_pagamento ||
       !mes_referencia ||
-      !ano_referencia ||
-      !descricao
+      !ano_referencia
     ) {
-      return res
-        .status(400)
-        .json({ error: "Todos os campos são obrigatórios." });
+      return res.status(400).json({ error: "Campos obrigatórios faltando." });
     }
 
-    // 🔎 1. Verifica se já existe mensalidade no mesmo mês/ano para o aluno
-    const verificaDuplicada = await Model.getMensalidadeExistente(
-      "receitas",
-      id_aluno,
-      mes_referencia,
-      ano_referencia
-    );
+    // 1. Verificar se já existe mensalidade para este aluno no mês/ano
+    const verificaDuplicada = await prisma.receitas.findFirst({
+      where: {
+        id_aluno: parseInt(id_aluno),
+        mes_referencia: parseInt(mes_referencia),
+        ano_referencia: parseInt(ano_referencia),
+      },
+    });
 
     if (verificaDuplicada) {
       return res.status(409).json({
@@ -110,105 +104,70 @@ export const cadastrarMensalidade = async (req, res) => {
       });
     }
 
-    // 🔹 2. Se não existir, cadastra normalmente
-    const novaReceita = await Model.cadastrarMensalidadeAll(
-      "receitas",
-      [
-        "id_aluno",
-        "valor",
-        "data_pagamento",
-        "mes_referencia",
-        "ano_referencia",
-        "descricao",
-      ],
-      [
-        id_aluno,
-        valor,
-        data_pagamento,
-        mes_referencia,
-        ano_referencia,
-        descricao,
-      ]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Mensalidade cadastrada com sucesso!",
-      data: novaReceita,
+    // 2. Criar no banco
+    const novaReceita = await prisma.receitas.create({
+      data: {
+        id_aluno: parseInt(id_aluno),
+        valor: parseFloat(valor),
+        data_pagamento: new Date(data_pagamento),
+        mes_referencia: parseInt(mes_referencia),
+        ano_referencia: parseInt(ano_referencia),
+        descricao: descricao || "Mensalidade",
+      },
     });
+
+    res
+      .status(201)
+      .json({ success: true, data: formatMensalidadeDates(novaReceita) });
   } catch (error) {
-    console.error("❌ Erro ao cadastrar mensalidade:", error.message);
-    res.status(500).json({ error: "Erro interno ao cadastrar mensalidade." });
+    console.error(error);
+    res.status(500).json({ error: "Erro ao cadastrar mensalidade." });
   }
 };
 
-//? DELETAR MENSALIDADE
+// Atualizar mensalidade existente
+export const atualizarMensalidade = async (req, res) => {
+  try {
+    const { id } = req.params; // id_mensalidade
+    const { data_pagamento, valor, mes_referencia, ano_referencia, descricao } =
+      req.body;
+
+    const atualizada = await prisma.receitas.update({
+      where: { id_mensalidade: parseInt(id) },
+      data: {
+        data_pagamento: data_pagamento ? new Date(data_pagamento) : undefined,
+        valor: valor ? parseFloat(valor) : undefined,
+        mes_referencia: mes_referencia ? parseInt(mes_referencia) : undefined,
+        ano_referencia: ano_referencia ? parseInt(ano_referencia) : undefined,
+        descricao: descricao,
+        atualizado_em: new Date(),
+      },
+    });
+
+    res.status(200).json({
+      message: "Atualizada com sucesso!",
+      data: formatMensalidadeDates(atualizada),
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao atualizar mensalidade." });
+  }
+};
+
+// Deletar mensalidade
 export const deletar = async (req, res) => {
   try {
     const { id } = req.params;
-    const receitaDeletada = await Model.deleteMensalidade(table, id);
-
-    if (!receitaDeletada) {
-      return res
-        .status(404)
-        .json({ message: "Mensalidade não encontrada para exclusão." });
-    }
+    const deletada = await prisma.receitas.delete({
+      where: { id_mensalidade: parseInt(id) },
+    });
 
     res.status(200).json({
       message: "Mensalidade deletada com sucesso",
-      receitas: formatMensalidadeDates(receitaDeletada),
+      data: formatMensalidadeDates(deletada),
     });
   } catch (error) {
-    console.error("❌ Erro ao deletar mensalidade:", error.message);
-    res.status(500).json({ error: "Erro interno ao excluir mensalidade." });
-  }
-};
-
-//? LISTAR MENSALIDADE ESPECÍFICA DE UM ALUNO
-export const mensalidadeByAlunoIdMensalidade = async (req, res) => {
-  try {
-    const { alunoId, receitasId } = req.params;
-
-    const receita = await Model.getMensalidadeByAlunoIdMensalidade(
-      table,
-      alunoId,
-      receitasId
-    );
-
-    if (!receita) {
-      return res.status(404).json({ message: "Mensalidade não encontrada." });
-    }
-
-    res.status(200).json(formatMensalidadeDates(receita));
-  } catch (error) {
-    console.error(
-      "❌ Erro ao buscar mensalidade específica do aluno:",
-      error.message
-    );
-    res.status(500).json({ error: "Erro interno ao buscar mensalidade." });
-  }
-};
-
-// Deletar mensalidade específica de um aluno
-export const deletarMensalidadeAluno = async (req, res) => {
-  try {
-    const { alunoId, receitasId } = req.params;
-    const receita = await Model.getMensalidadeById(table, receitasId);
-
-    if (!receita || receita.id_aluno != alunoId) {
-      return res
-        .status(404)
-        .json({ message: "Mensalidade não encontrada para este aluno." });
-    }
-
-    const receitaDeletada = await Model.deleteMensalidade(table, receitasId);
-
-    res.status(200).json({
-      message: "Mensalidade deletada com sucesso",
-      mensalidade: formatMensalidadeDates(receitaDeletada),
+    res.status(500).json({
+      error: "Erro ao deletar mensalidade ou registro não encontrado.",
     });
-  } catch (error) {
-    console.error("❌ Erro ao deletar mensalidade do aluno:", error.message);
-    res.status(500).json({ error: "Erro ao deletar mensalidade." });
   }
 };

@@ -25,3 +25,4 @@ Thumbs.db
 
 # Scrips admininistrativos
 scripts/resetAdminPassword.js
+/generated/prisma

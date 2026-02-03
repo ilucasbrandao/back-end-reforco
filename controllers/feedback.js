@@ -1,7 +1,6 @@
-import { FeedbackModel } from "../models/feedback.js";
-import { pool } from "../db.js";
-import { feedbackUpdateSchema } from "../schemas/feedback.js";
-import { ZodError } from "zod";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const FeedbackController = {
   // ======================================================
@@ -10,49 +9,45 @@ export const FeedbackController = {
   async listarPorAluno(req, res) {
     try {
       const { id } = req.params;
+      const alunoId = parseInt(id);
 
       // 🔐 Controle de acesso para responsáveis
       if (req.userRole === "responsavel") {
-        const check = await pool.query(
-          `SELECT 1 FROM responsaveis_alunos
-            WHERE responsavel_id = $1 AND aluno_id = $2`,
-          [req.userId, id]
-        );
+        const vinculo = await prisma.responsaveis_alunos.findFirst({
+          where: {
+            responsavel_id: req.userId,
+            aluno_id: alunoId,
+          },
+        });
 
-        if (check.rowCount === 0) {
+        if (!vinculo) {
           return res
             .status(403)
             .json({ message: "Acesso negado a este aluno." });
         }
       }
 
-      const result = await FeedbackModel.listarPorAluno(id);
-
-      // 🛡️ Defesa + normalização de dados
-      const rows = result.rows.map((item) => {
-        let fotos = [];
-        try {
-            // Lidar com casos onde fotos pode ser uma string ou já um objeto/array
-            if (typeof item.fotos === "string") {
-                fotos = JSON.parse(item.fotos);
-            } else if (Array.isArray(item.fotos)) {
-                fotos = item.fotos;
-            }
-        } catch (e) {
-            console.error("Erro ao analisar fotos do feedback:", item.id, e);
-            fotos = [];
-        }
-
-        return {
-            ...item,
-            avaliacao_pedagogica: item.avaliacao_pedagogica || {},
-            avaliacao_psico: item.avaliacao_psico || {},
-            fotos: fotos,
-            lido_pelos_pais: item.lido_pelos_pais ?? false,
-        };
+      const feedbacks = await prisma.feedbacks.findMany({
+        where: { aluno_id: alunoId },
+        orderBy: { criado_em: "desc" },
+        include: {
+          autor: {
+            // Traz o nome do professor que escreveu
+            select: { nome: true },
+          },
+        },
       });
 
-      res.json(rows);
+      // O Prisma já retorna JSON como objeto, mas garantimos a normalização
+      const normalizados = feedbacks.map((item) => ({
+        ...item,
+        avaliacao_pedagogica: item.avaliacao_pedagogica || {},
+        avaliacao_psico: item.avaliacao_psico || {},
+        fotos: Array.isArray(item.fotos) ? item.fotos : [],
+        lido_pelos_pais: item.lido_pelos_pais ?? false,
+      }));
+
+      res.json(normalizados);
     } catch (error) {
       console.error("Erro ao listar feedbacks:", error);
       res.status(500).json({ error: "Erro ao buscar feedbacks." });
@@ -64,74 +59,61 @@ export const FeedbackController = {
   // ======================================================
   async criar(req, res) {
     try {
-      // 🔐 Regra de acesso
       if (req.userRole === "responsavel") {
         return res.status(403).json({
           message: "Apenas professores e admin podem criar relatórios.",
         });
       }
 
-      // ==========================
-      // 1. DADOS DO FORM
-      // ==========================
       const {
         aluno_id,
         bimestre,
         avaliacao_pedagogica,
         avaliacao_psico,
         observacao,
-        fotos_existentes
+        fotos_existentes,
       } = req.body;
 
-      // 🔁 Como veio via FormData, converte strings JSON para objetos
-      let pedagogicoParsed = {};
-      let psicoParsed = {};
-      
-      try {
-          pedagogicoParsed = avaliacao_pedagogica ? JSON.parse(avaliacao_pedagogica) : {};
-          psicoParsed = avaliacao_psico ? JSON.parse(avaliacao_psico) : {};
-      } catch (e) {
-          console.error("Erro ao analisar campos JSON:", e);
-          return res.status(400).json({ error: "Formato JSON inválido para campos de avaliação." });
+      // 🔁 Com Prisma + JSON, o parsing só é necessário se vier como String via FormData
+      const pedagogicoParsed =
+        typeof avaliacao_pedagogica === "string"
+          ? JSON.parse(avaliacao_pedagogica)
+          : avaliacao_pedagogica;
+      const psicoParsed =
+        typeof avaliacao_psico === "string"
+          ? JSON.parse(avaliacao_psico)
+          : avaliacao_psico;
+
+      // Gerar URLs das novas fotos
+      const novasFotos =
+        req.files?.map(
+          (file) =>
+            `${req.protocol}://${req.get("host")}/uploads/feedbacks/imagens/${file.filename}`,
+        ) || [];
+
+      let fotosFinais = [...novasFotos];
+      if (fotos_existentes) {
+        const existentes =
+          typeof fotos_existentes === "string"
+            ? JSON.parse(fotos_existentes)
+            : fotos_existentes;
+        if (Array.isArray(existentes))
+          fotosFinais = [...existentes, ...fotosFinais];
       }
 
-      // ==========================
-      // 2. IMAGENS (MULTER)
-      // ==========================
-      const novasFotos =
-        req.files?.map((file) => {
-          return `${req.protocol}://${req.get(
-            "host"
-          )}/uploads/feedbacks/imagens/${file.filename}`;
-        }) || [];
-        
-      // Combinar com fotos existentes se necessário
-      let fotosFinais = [...novasFotos];
-       if (fotos_existentes) {
-          try {
-             const existentes = JSON.parse(fotos_existentes);
-             if (Array.isArray(existentes)) {
-                fotosFinais = [...existentes, ...fotosFinais];
-             }
-          } catch(e) {
-             console.error("Erro ao analisar fotos existentes:", e);
-          }
-       }
-
-      // ==========================
-      // 3. SALVAR NO BANCO
-      // ==========================
-      const result = await FeedbackModel.criar({
-        aluno_id,
-        autor_id: req.userId,
-        bimestre,
-        avaliacao_pedagogica: pedagogicoParsed,
-        avaliacao_psico: psicoParsed,
-        fotos: fotosFinais,
-        observacao,
+      const novoFeedback = await prisma.feedbacks.create({
+        data: {
+          aluno_id: parseInt(aluno_id),
+          autor_id: req.userId,
+          bimestre,
+          avaliacao_pedagogica: pedagogicoParsed || {},
+          avaliacao_psico: psicoParsed || {},
+          fotos: fotosFinais,
+          observacao,
+        },
       });
 
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(novoFeedback);
     } catch (error) {
       console.error("Erro ao criar feedback:", error);
       res.status(500).json({ error: "Erro ao criar relatório." });
@@ -143,10 +125,12 @@ export const FeedbackController = {
   // ======================================================
   async marcarComoLido(req, res) {
     try {
-      await FeedbackModel.marcarComoLido(req.params.id);
+      await prisma.feedbacks.update({
+        where: { id: parseInt(req.params.id) },
+        data: { lido_pelos_pais: true },
+      });
       res.json({ message: "Marcado como lido." });
     } catch (error) {
-      console.error("Erro ao marcar como lido:", error);
       res.status(500).json({ error: "Erro ao atualizar status." });
     }
   },
@@ -156,70 +140,53 @@ export const FeedbackController = {
   // ======================================================
   async atualizar(req, res) {
     try {
-     
+      const { id } = req.params;
       const {
-          bimestre,
-          avaliacao_pedagogica,
-          avaliacao_psico,
-          observacao,
-          fotos_existentes
+        bimestre,
+        avaliacao_pedagogica,
+        avaliacao_psico,
+        observacao,
+        fotos_existentes,
       } = req.body;
 
-      // Converter campos JSON
-      let pedagogicoParsed = {};
-      let psicoParsed = {};
-      
-      try {
-          pedagogicoParsed = avaliacao_pedagogica ? JSON.parse(avaliacao_pedagogica) : {};
-          psicoParsed = avaliacao_psico ? JSON.parse(avaliacao_psico) : {};
-      } catch (e) {
-          console.error("Erro ao analisar campos JSON:", e);
-          return res.status(400).json({ error: "Formato JSON inválido." });
-      }
+      const pedagogicoParsed =
+        typeof avaliacao_pedagogica === "string"
+          ? JSON.parse(avaliacao_pedagogica)
+          : avaliacao_pedagogica;
+      const psicoParsed =
+        typeof avaliacao_psico === "string"
+          ? JSON.parse(avaliacao_psico)
+          : avaliacao_psico;
 
-      // Lidar com Novas Imagens
-      const novasFotos = req.files?.map((file) => {
-          return `${req.protocol}://${req.get(
-            "host"
-          )}/uploads/feedbacks/imagens/${file.filename}`;
-      }) || [];
+      const novasFotos =
+        req.files?.map(
+          (file) =>
+            `${req.protocol}://${req.get("host")}/uploads/feedbacks/imagens/${file.filename}`,
+        ) || [];
 
-      // Lidar com Imagens Existentes
       let fotosFinais = [...novasFotos];
       if (fotos_existentes) {
-          try {
-             const existentes = JSON.parse(fotos_existentes);
-             if (Array.isArray(existentes)) {
-                fotosFinais = [...existentes, ...fotosFinais];
-             }
-          } catch(e) {
-             console.error("Erro ao analisar fotos existentes:", e);
-          }
+        const existentes =
+          typeof fotos_existentes === "string"
+            ? JSON.parse(fotos_existentes)
+            : fotos_existentes;
+        if (Array.isArray(existentes))
+          fotosFinais = [...existentes, ...fotosFinais];
       }
 
-      const dataToUpdate = {
+      const atualizado = await prisma.feedbacks.update({
+        where: { id: parseInt(id) },
+        data: {
           bimestre,
           avaliacao_pedagogica: pedagogicoParsed,
           avaliacao_psico: psicoParsed,
           observacao,
-          fotos: fotosFinais
-      };
+          fotos: fotosFinais,
+        },
+      });
 
-      const result = await FeedbackModel.atualizar(req.params.id, dataToUpdate);
-
-      if (result.rowCount === 0) {
-        return res.status(404).json({ error: "Relatório não encontrado." });
-      }
-
-      res.json(result.rows[0]);
+      res.json(atualizado);
     } catch (error) {
-      if (error instanceof ZodError) {
-        return res.status(400).json({
-          message: "Dados inválidos",
-          errors: error.errors,
-        });
-      }
-
       console.error("Erro ao atualizar feedback:", error);
       res.status(500).json({ error: "Erro ao atualizar relatório." });
     }
@@ -230,10 +197,11 @@ export const FeedbackController = {
   // ======================================================
   async deletar(req, res) {
     try {
-      await FeedbackModel.deletar(req.params.id);
+      await prisma.feedbacks.delete({
+        where: { id: parseInt(req.params.id) },
+      });
       res.json({ message: "Relatório excluído com sucesso." });
     } catch (error) {
-      console.error("Erro ao excluir feedback:", error);
       res.status(500).json({ error: "Erro ao excluir relatório." });
     }
   },
