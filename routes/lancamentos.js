@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { pool } from "../db.js";
+import prisma from "../prisma.js"; // Import centralizado
 import auth from "../middleware/auth.js";
 
 const router = Router();
@@ -9,59 +9,75 @@ router.use(auth);
 router.get("/", async (req, res) => {
   try {
     const { inicio, fim } = req.query;
-    const params = [inicio || null, fim || null];
 
-    // 1️⃣ Buscar lançamentos (receitas usam data_pagamento, despesas usam l.data)
-    const queryLancamentos = `
-      SELECT
-        l.lancamento_id,
-        l.tipo,
-        l.origem_id,
-        l.descricao,
-        l.valor,
-        'Finalizada' AS status,
-        COALESCE(
-            TO_CHAR(m.data_pagamento, 'YYYY-MM-DD'), -- data de pagamento da receita
-            TO_CHAR(l.data, 'YYYY-MM-DD')            -- data da despesa
-        ) AS data,
-        a.nome AS nome_aluno,
-        p.nome AS nome_professor
-      FROM public.lancamentos l
-      LEFT JOIN public.receitas m
-        ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
-      LEFT JOIN public.alunos a
-        ON l.id_aluno = a.id
-      LEFT JOIN public.professores p
-        ON l.id_professor = p.id
-      WHERE
-        ($1::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date >= $1)
-        AND ($2::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date <= $2)
-      ORDER BY COALESCE(m.data_pagamento, l.data) DESC
-    `;
+    // Filtro de data flexível
+    const whereClause = {};
+    if (inicio || fim) {
+      whereClause.data = {};
+      if (inicio) whereClause.data.gte = new Date(inicio);
+      if (fim) whereClause.data.lte = new Date(fim);
+    }
 
-    const lancamentosResult = await pool.query(queryLancamentos, params);
+    // 1️⃣ Buscar lançamentos com suas relações
+    const lancamentos = await prisma.lancamentos.findMany({
+      where: whereClause,
+      include: {
+        alunos: {
+          select: { nome: true },
+        },
+        professores: {
+          select: { nome: true },
+        },
+        receitas: {
+          select: { data_pagamento: true, valor: true },
+        },
+      },
+      orderBy: {
+        data: "desc",
+      },
+    });
 
-    // 2️⃣ Calcular resumo
-    const queryResumo = `
-      SELECT
-        SUM(CASE WHEN l.tipo = 'receita' THEN COALESCE(m.valor, l.valor) ELSE 0 END) AS total_receitas,
-        SUM(CASE WHEN l.tipo = 'despesa' THEN l.valor ELSE 0 END) AS total_despesas,
-        SUM(CASE WHEN l.tipo = 'receita' THEN COALESCE(m.valor, l.valor) ELSE -l.valor END) AS saldo
-      FROM public.lancamentos l
-      LEFT JOIN public.receitas m
-        ON l.origem_id = m.id_mensalidade AND l.tipo = 'receita'
-      WHERE
-        ($1::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date >= $1)
-        AND ($2::date IS NULL OR COALESCE(m.data_pagamento, l.data)::date <= $2)
-    `;
-    const resumoResult = await pool.query(queryResumo, params);
+    // 2️⃣ Formatar os dados para manter a compatibilidade com o seu Frontend
+    const formatados = lancamentos.map((l) => {
+      // Prioriza a data de pagamento da receita se existir, senão usa a data do lançamento
+      const dataFinal = l.receitas?.data_pagamento
+        ? l.receitas.data_pagamento.toISOString().split("T")[0]
+        : l.data.toISOString().split("T")[0];
+
+      return {
+        lancamento_id: l.lancamento_id,
+        tipo: l.tipo,
+        origem_id: l.origem_id,
+        descricao: l.descricao,
+        valor: Number(l.valor),
+        status: "Finalizada",
+        data: dataFinal,
+        nome_aluno: l.alunos?.nome || null,
+        nome_professor: l.professores?.nome || null,
+      };
+    });
+
+    // 3️⃣ Calcular resumo (Total de Receitas, Despesas e Saldo)
+    const resumo = formatados.reduce(
+      (acc, curr) => {
+        if (curr.tipo === "receita") {
+          acc.total_receitas += curr.valor;
+          acc.saldo += curr.valor;
+        } else {
+          acc.total_despesas += curr.valor;
+          acc.saldo -= curr.valor;
+        }
+        return acc;
+      },
+      { total_receitas: 0, total_despesas: 0, saldo: 0 },
+    );
 
     res.json({
-      lancamentos: lancamentosResult.rows,
-      resumo: resumoResult.rows[0],
+      lancamentos: formatados,
+      resumo: resumo,
     });
   } catch (err) {
-    console.error("❌ Erro ao buscar lançamentos e resumo:", err);
+    console.error("❌ Erro ao buscar lançamentos e resumo:", err.message);
     res.status(500).json({ error: "Erro ao buscar lançamentos e resumo" });
   }
 });

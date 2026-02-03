@@ -1,9 +1,9 @@
-if (process.env.NODE_ENV !== "production") {
-  const dotenv = await import("dotenv");
-  dotenv.config();
-}
+import dotenv from "dotenv";
+
+dotenv.config();
 
 if (!process.env.JWT_SECRET) {
-  console.error("JWT_SECRET não definido");
-  process.exit(1);
+  console.error("❌ JWT_SECRET não definido no arquivo .env");
 }
+
+export const env = process.env;

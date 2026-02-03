@@ -1,5 +1,4 @@
 import express from "express";
-
 import {
   listarAlunos,
   getAlunoComMovimentacoes,
@@ -10,42 +9,55 @@ import {
   atualizarFotoAluno,
 } from "../controllers/students.js";
 
-// Path
 import path from "path";
 import { fileURLToPath } from "url";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Middleware
 import auth from "../middleware/auth.js";
 import { createUploadMiddleware } from "../middleware/upload.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Configuração de Upload de Foto
 const uploadFotoAluno = createUploadMiddleware(
-  path.join(__dirname, "../uploads/alunos/fotos"),
+  path.join(__dirname, "../../uploads/alunos/fotos"), // Ajustado caminho se necessário
   {
-    allowedMimeTypes: ["image/"],
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
     maxSizeMB: 5,
     maxFiles: 1,
-  }
+  },
 );
 
 const router = express.Router();
 
-//? ROTAS ALUNOS
+// --- 1. ROTAS FIXAS / ESPECÍFICAS (Sempre no topo) ---
 
-//Nova rota
+// Rota para o Pai ver apenas os seus dependentes
 router.get("/meus-filhos", auth, listarMeusFilhos);
 
-router.get("/", listarAlunos); // Rota para listar todos os alunos (GET)
-router.post("/", cadastrar); // Rota para criar (POST)
+// Listar todos os alunos (Geralmente usada pelo Admin/Professor)
+// DICA: Você pode adicionar 'auth' aqui depois para proteger a lista geral
+router.get("/", auth, listarAlunos);
+
+// Cadastrar novo aluno
+router.post("/", auth, cadastrar);
+
+// --- 2. ROTAS COM PARÂMETROS (:id) ---
+
+// Detalhes do aluno + Mensalidades (O Prisma já traz tudo junto agora)
+router.get("/:id", auth, getAlunoComMovimentacoes);
+
+// Atualizar dados cadastrais (Incluindo o novo dia_vencimento)
+router.put("/:id", auth, atualizar);
+
+// Rota específica para atualização de foto (Usa PATCH por ser alteração parcial)
 router.patch(
   "/:id/foto",
   auth,
   uploadFotoAluno.single("foto"),
-  atualizarFotoAluno
+  atualizarFotoAluno,
 );
 
-router.get("/:id", getAlunoComMovimentacoes); //Rota para listar por ID (GET)
-router.put("/:id", atualizar); // Rota para atualizar (PUT)
-router.delete("/:id", deletar); // Rota para deletar (DELETE)
+// Deletar aluno
+router.delete("/:id", auth, deletar);
+
 export default router;

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "npx prisma generate",
-    "start": "npx prisma db push && node src/server.js",
+    "start": "node ./api/index.js",
     "postinstall": "npx prisma generate"
   },
   "author": "Lucas Brandao",

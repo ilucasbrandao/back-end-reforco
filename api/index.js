@@ -1,12 +1,12 @@
+import "../config/env.js"; // Carrega as variáveis de ambiente antes de tudo
 import express from "express";
-import dotenv from "dotenv";
 import cors from "cors";
 import fs from "fs";
-import { UPLOADS_ROOT } from "../config/uploads.js";
 
 // --- Importações Internas ---
 import auth from "../middleware/auth.js";
 import { createUploadMiddleware } from "../middleware/upload.js";
+import { UPLOADS_ROOT } from "../config/uploads.js";
 
 // --- Rotas ---
 import authRoutes from "../routes/auth.js";
@@ -52,7 +52,7 @@ app.use(
       }
     },
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());

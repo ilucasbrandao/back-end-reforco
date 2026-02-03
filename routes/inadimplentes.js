@@ -1,38 +1,56 @@
-// src/routes/inadimplentes.js
 import { Router } from "express";
-import { pool } from "../db.js";
+import prisma from "../prisma.js"; // Import centralizado e com .js
+import auth from "../middleware/auth.js";
 
 const router = Router();
 
-router.get("/notificacao", async (req, res) => {
+// Protegendo a rota com o middleware de autenticação
+router.get("/notificacao", auth, async (req, res) => {
   const { mes, ano } = req.query;
 
-  if (!mes || !ano || isNaN(mes) || isNaN(ano)) {
+  // Validação básica
+  const mesNum = parseInt(mes);
+  const anoNum = parseInt(ano);
+
+  if (!mes || !ano || isNaN(mesNum) || isNaN(anoNum)) {
     return res.status(400).json({ error: "Mês ou ano inválido" });
   }
 
   try {
-    const query = `
-      SELECT a.id, a.nome, a.valor_mensalidade
-      FROM alunos a
-      WHERE a.status = 'ativo'
-        -- Só alunos matriculados antes ou no mês analisado
-        AND a.data_matricula <= make_date($2::int, $1::int, 1)
-        -- Verifica se não existe pagamento no mês/ano
-        AND NOT EXISTS (
-          SELECT 1
-          FROM receitas r
-          WHERE r.id_aluno = a.id
-            AND EXTRACT(MONTH FROM r.data_pagamento) = $1
-            AND EXTRACT(YEAR FROM r.data_pagamento) = $2
-        )
-      ORDER BY a.nome
-    `;
+    // Criamos a data limite (primeiro dia do mês analisado) para comparar com a matrícula
+    const dataLimiteMatricula = new Date(anoNum, mesNum - 1, 1);
 
-    const result = await pool.query(query, [mes, ano]);
-    res.json({ inadimplentes: result.rows });
+    const inadimplentes = await prisma.alunos.findMany({
+      where: {
+        status: "ativo",
+        // Só alunos matriculados antes ou no mês analisado
+        data_matricula: {
+          lte: dataLimiteMatricula,
+        },
+        // Filtro poderoso: "Traga alunos que NÃO possuem nenhuma receita que..."
+        NOT: {
+          receitas: {
+            some: {
+              mes_referencia: mesNum, // Usando os campos de referência que o seu banco já tem
+              ano_referencia: anoNum,
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        nome: true,
+        valor_mensalidade: true,
+        telefone: true, // Adicionado telefone, útil para notificações
+      },
+      orderBy: {
+        nome: "asc",
+      },
+    });
+
+    res.json({ inadimplentes });
   } catch (err) {
-    console.error("❌ Erro ao buscar inadimplentes:", err);
+    console.error("❌ Erro ao buscar inadimplentes:", err.message);
     res.status(500).json({ error: "Erro ao buscar inadimplentes" });
   }
 });

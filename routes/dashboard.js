@@ -1,171 +1,129 @@
 import { Router } from "express";
-import { pool } from "../db.js";
+import prisma from "../prisma.js"; // Import centralizado
 import auth from "../middleware/auth.js";
 
 const router = Router();
 router.use(auth);
 
-// GET /dashboard?mes=11&ano=2024
 router.get("/", async (req, res) => {
   try {
-    // --- 🛡️ BLINDAGEM DE DATA  ---
     const hoje = new Date();
     let { mes, ano } = req.query;
 
-    // Se não vier nada ou vier "undefined", usa a data de hoje
-    if (!mes || mes === "undefined") {
-      mes = hoje.getMonth() + 1; // JS conta meses de 0 a 11
-    }
-    if (!ano || ano === "undefined") {
-      ano = hoje.getFullYear();
-    }
+    const mesNum =
+      !mes || mes === "undefined" ? hoje.getMonth() + 1 : Number(mes);
+    const anoNum =
+      !ano || ano === "undefined" ? hoje.getFullYear() : Number(ano);
 
-    // Garante que sejam números para cálculos
-    const mesNum = Number(mes);
-    const anoNum = Number(ano);
+    // Intervalo de datas para o Prisma (Lançamentos de Caixa)
+    const dataInicio = new Date(anoNum, mesNum - 1, 1);
+    const dataFim = new Date(anoNum, mesNum, 1);
 
-    // Formata o mês para ter 2 dígitos (ex: 5 vira "05") para a string de data
-    const mesString = String(mesNum).padStart(2, "0");
+    // --- EXECUÇÃO EM PARALELO (Mais rápido que o Pool antigo) ---
+    const [
+      alunosAtivos,
+      professoresAtivos,
+      turnoGroup,
+      lancamentosPeriodo,
+      alunosAniv,
+      professoresAniv,
+      previstoMensalidades,
+      previstoSalarios,
+      matriculadosMes,
+    ] = await Promise.all([
+      // 1. Alunos Ativos
+      prisma.alunos.count({ where: { status: "ativo" } }),
 
-    // Define inicio e fim para consultas de intervalo
-    const firstDay = `${anoNum}-${mesString}-01`;
-    // Pega o último dia do mês dinamicamente
-    const lastDay = `${anoNum}-${mesString}-${new Date(
-      anoNum,
-      mesNum,
-      0
-    ).getDate()}`;
-    // --------------------------------------------------
+      // 2. Professores Ativos
+      prisma.professores.count({ where: { status: "ativo" } }),
 
-    // 1️⃣ Quantidade de alunos ativos (Snapshot - Independe do mês)
-    const { rows: alunosRows } = await pool.query(`
-      SELECT COUNT(*) AS quantidade
-      FROM alunos
-      WHERE status = 'ativo'
-    `);
-    const alunos_ativos = Number(alunosRows[0].quantidade);
+      // 3. Alunos por Turno
+      prisma.alunos.groupBy({
+        by: ["turno"],
+        where: { status: "ativo" },
+        _count: true,
+      }),
 
-    // 2️⃣ Quantidade de professores ativos (Snapshot)
-    const { rows: professoresRows } = await pool.query(`
-      SELECT COUNT(*) AS quantidade
-      FROM professores
-      WHERE status = 'ativo'
-    `);
-    const professores_ativos = Number(professoresRows[0].quantidade);
+      // 4. Saldo de Caixa (Receitas e Despesas)
+      prisma.lancamentos.findMany({
+        where: { data: { gte: dataInicio, lt: dataFim } },
+        select: { tipo: true, valor: true },
+      }),
 
-    // 3️⃣ Alunos por turno (Snapshot)
-    const { rows: turnoRows } = await pool.query(`
-      SELECT turno, COUNT(*) AS quantidade
-      FROM alunos
-      WHERE status = 'ativo'
-      GROUP BY turno
-    `);
+      // 5. Aniversariantes Alunos (Usando Raw Query apenas para o EXTRACT, que é específico)
+      prisma.$queryRaw`SELECT nome, data_nascimento FROM alunos WHERE EXTRACT(MONTH FROM data_nascimento) = ${mesNum} AND status = 'ativo' ORDER BY EXTRACT(DAY FROM data_nascimento)`,
+
+      // 7. Aniversariantes Professores
+      prisma.$queryRaw`SELECT nome, data_nascimento FROM professores WHERE EXTRACT(MONTH FROM data_nascimento) = ${mesNum} AND status = 'ativo' ORDER BY EXTRACT(DAY FROM data_nascimento)`,
+
+      // 6. Saldo Previsto Mensalidades
+      prisma.alunos.aggregate({
+        where: { status: "ativo" },
+        _sum: { valor_mensalidade: true },
+      }),
+
+      // 8. Saldo Previsto Salários
+      prisma.professores.aggregate({
+        where: { status: "ativo" },
+        _sum: { salario: true },
+      }),
+
+      // 9. Matriculados no Mês
+      prisma.alunos.count({
+        where: {
+          status: "ativo",
+          data_matricula: { gte: dataInicio, lt: dataFim },
+        },
+      }),
+    ]);
+
+    // --- PROCESSAMENTO DOS RESULTADOS ---
+
+    // Turnos
     const alunos_por_turno = {};
-    turnoRows.forEach(
-      (r) => (alunos_por_turno[r.turno] = Number(r.quantidade))
-    );
+    turnoGroup.forEach((tg) => {
+      alunos_por_turno[tg.turno] = tg._count;
+    });
 
-    // 4️⃣ Saldo de caixa no período
-    const { rows: caixaRows } = await pool.query(
-      `
-      SELECT
-        SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END) AS total_receitas,
-        SUM(CASE WHEN tipo = 'despesa' THEN valor ELSE 0 END) AS total_despesas,
-        SUM(CASE WHEN tipo = 'receita' THEN valor ELSE -valor END) AS saldo
-      FROM lancamentos
-      WHERE data >= $1::date AND data <= $2::date
-    `,
-      [firstDay, lastDay]
-    );
-    const saldo_caixa = Number(caixaRows[0].saldo || 0);
+    // Saldo de Caixa
+    const saldo_caixa = lancamentosPeriodo.reduce((acc, curr) => {
+      const v = Number(curr.valor);
+      return curr.tipo === "receita" ? acc + v : acc - v;
+    }, 0);
 
-    // 5️⃣ Aniversariantes do mês SELECIONADO
-    const { rows: aniversariantesRows } = await pool.query(
-      `
-      SELECT nome, data_nascimento
-      FROM alunos
-      WHERE EXTRACT(MONTH FROM data_nascimento) = $1
-        AND status = 'ativo'
-      ORDER BY EXTRACT(DAY FROM data_nascimento)
-    `,
-      [mesNum]
-    );
-
-    // 6️⃣ Saldo previsto de mensalidades (Snapshot)
-    const { rows: mensalidadesRows } = await pool.query(`
-      SELECT SUM(valor_mensalidade) AS saldo_previsto
-      FROM alunos
-      WHERE status = 'ativo'
-    `);
-    const saldo_previsto_mensalidades = Number(
-      mensalidadesRows[0].saldo_previsto || 0
-    );
-
-    // 7️⃣ Aniversariantes Professores
-    const { rows: professoresAniversariantesRows } = await pool.query(
-      `
-      SELECT nome, data_nascimento
-      FROM professores
-      WHERE EXTRACT(MONTH FROM data_nascimento) = $1
-        AND status = 'ativo'
-      ORDER BY EXTRACT(DAY FROM data_nascimento)
-    `,
-      [mesNum]
-    );
-
-    // 8️⃣ Saldo previsto com salários (Snapshot)
-    const { rows: salariosRows } = await pool.query(`
-      SELECT COALESCE(SUM(salario::numeric), 0) AS total_salarios
-      FROM professores
-      WHERE status = 'ativo'  
-    `);
-    const saldo_previsto_salarios = Number(salariosRows[0].total_salarios || 0);
-
-    // 9️⃣ Matriculados no mês SELECIONADO
-    const { rows: matriculadosRows } = await pool.query(
-      `
-      SELECT COUNT(*) AS quantidade
-      FROM alunos
-      WHERE EXTRACT(MONTH FROM data_matricula) = $1
-        AND EXTRACT(YEAR FROM data_matricula) = $2
-        AND status = 'ativo'
-    `,
-      [mesNum, anoNum]
-    );
-
-    const matriculados_mes_atual = Number(matriculadosRows[0].quantidade || 0);
-
-    // 🔟 Inadimplentes do mês SELECIONADO
-    const { rows: inadimplentesRows } = await pool.query(
-      `
-      SELECT id, nome, valor_mensalidade, telefone
-      FROM alunos
-      WHERE status = 'ativo'
-        AND NOT EXISTS (
-          SELECT 1
-          FROM receitas
-          WHERE receitas.id_aluno = alunos.id
-            AND receitas.mes_referencia = $1
-            AND receitas.ano_referencia = $2
-        )
-    `,
-      [mesNum, anoNum]
-    );
+    // 10. Inadimplentes (Alunos ativos que não possuem receita no mês/ano)
+    // O Prisma facilita muito essa query complexa
+    const inadimplentes = await prisma.alunos.findMany({
+      where: {
+        status: "ativo",
+        NOT: {
+          receitas: {
+            some: {
+              mes_referencia: mesNum,
+              ano_referencia: anoNum,
+            },
+          },
+        },
+      },
+      select: { id: true, nome: true, valor_mensalidade: true, telefone: true },
+    });
 
     res.json({
-      alunos_ativos,
-      professores_ativos,
+      alunos_ativos: alunosAtivos,
+      professores_ativos: professoresAtivos,
       alunos_por_turno,
       saldo_caixa,
-      aniversariantes: aniversariantesRows,
-      professoresAniversariantes: professoresAniversariantesRows,
-      saldo_previsto_mensalidades,
-      saldo_previsto_salarios,
-      matriculados_mes_atual,
-      inadimplentes: inadimplentesRows,
+      aniversariantes: alunosAniv,
+      professoresAniversariantes: professoresAniv,
+      saldo_previsto_mensalidades: Number(
+        previstoMensalidades._sum.valor_mensalidade || 0,
+      ),
+      saldo_previsto_salarios: Number(previstoSalarios._sum.salario || 0),
+      matriculados_mes_atual: matriculadosMes,
+      inadimplentes,
     });
   } catch (err) {
-    console.error("Erro Dashboard:", err.message); // Log melhorado
+    console.error("Erro Dashboard:", err.message);
     res.status(500).json({ error: "Erro ao carregar dados do dashboard" });
   }
 });

@@ -1,74 +1,88 @@
 import { Router } from "express";
-import { pool } from "../db.js";
+import prisma from "../prisma.js"; // Import centralizado
+import auth from "../middleware/auth.js";
 
 const router = Router();
 
-router.get("/relatorio-mensal", async (req, res) => {
+router.get("/relatorio-mensal", auth, async (req, res) => {
   const { mes, ano } = req.query;
 
+  const mesNum = parseInt(mes);
+  const anoNum = parseInt(ano);
+
   // Validação básica
-  if (!mes || !ano || isNaN(mes) || isNaN(ano)) {
+  if (!mes || !ano || isNaN(mesNum) || isNaN(anoNum)) {
     return res.status(400).json({ error: "Mês ou ano inválido" });
   }
 
   try {
-    // 1. Receitas do mês
-    const receitas = await pool.query(
-      `SELECT SUM(valor) as total FROM receitas 
-       WHERE EXTRACT(MONTH FROM data_pagamento) = $1 
-       AND EXTRACT(YEAR FROM data_pagamento) = $2`,
-      [mes, ano]
-    );
+    // Definindo o intervalo de datas para o mês selecionado
+    const dataInicio = new Date(anoNum, mesNum - 1, 1);
+    const dataFim = new Date(anoNum, mesNum, 1);
 
-    // 2. Despesas do mês
-    const despesas = await pool.query(
-      `SELECT SUM(valor) as total FROM despesas 
-       WHERE EXTRACT(MONTH FROM data_pagamento) = $1 
-       AND EXTRACT(YEAR FROM data_pagamento) = $2`,
-      [mes, ano]
-    );
+    // Executando todas as consultas em paralelo para performance
+    const [
+      receitas,
+      despesas,
+      totalAlunos,
+      totalProfessores,
+      novasMatriculas,
+      inadimplentes,
+    ] = await Promise.all([
+      // 1. Receitas do mês
+      prisma.receitas.aggregate({
+        where: {
+          data_pagamento: { gte: dataInicio, lt: dataFim },
+        },
+        _sum: { valor: true },
+      }),
 
-    // 3. Total de Alunos Ativos
-    const alunos = await pool.query(
-      `SELECT COUNT(*) as total FROM alunos WHERE status = 'ativo'`
-    );
+      // 2. Despesas do mês
+      prisma.despesas.aggregate({
+        where: {
+          data_pagamento: { gte: dataInicio, lt: dataFim },
+        },
+        _sum: { valor: true },
+      }),
 
-    // 4. Total de Professores Ativos
-    const professores = await pool.query(
-      `SELECT COUNT(*) as total FROM professores WHERE status = 'ativo'`
-    );
+      // 3. Total de Alunos Ativos
+      prisma.alunos.count({ where: { status: "ativo" } }),
 
-    // 5. Novas Matrículas no Mês
-    const novasMatriculas = await pool.query(
-      `SELECT COUNT(*) as total FROM alunos 
-       WHERE EXTRACT(MONTH FROM data_matricula) = $1 
-       AND EXTRACT(YEAR FROM data_matricula) = $2`,
-      [mes, ano]
-    );
+      // 4. Total de Professores Ativos
+      prisma.professores.count({ where: { status: "ativo" } }),
 
-    // 6. Lista de Inadimplentes
-    const inadimplentes = await pool.query(
-      `SELECT id, nome, valor_mensalidade
-       FROM alunos
-       WHERE status = 'ativo'
-         AND NOT EXISTS (
-           SELECT 1
-           FROM receitas
-           WHERE receitas.id_aluno = alunos.id
-             AND EXTRACT(MONTH FROM data_pagamento) = $1
-             AND EXTRACT(YEAR FROM data_pagamento) = $2
-         )`,
-      [mes, ano]
-    );
+      // 5. Novas Matrículas no Mês
+      prisma.alunos.count({
+        where: {
+          data_matricula: { gte: dataInicio, lt: dataFim },
+        },
+      }),
+
+      // 6. Lista de Inadimplentes (Alunos ativos sem receita no mês/ano)
+      prisma.alunos.findMany({
+        where: {
+          status: "ativo",
+          NOT: {
+            receitas: {
+              some: {
+                mes_referencia: mesNum,
+                ano_referencia: anoNum,
+              },
+            },
+          },
+        },
+        select: { id: true, nome: true, valor_mensalidade: true },
+      }),
+    ]);
 
     // --- Processamento de Dados ---
 
-    const totalReceitas = receitas.rows[0].total ? parseFloat(receitas.rows[0].total) : 0;
-    const totalDespesas = despesas.rows[0].total ? parseFloat(despesas.rows[0].total) : 0;
-    
-    // Calcula o valor total da inadimplência somando a lista retornada (NOVO)
-    const totalInadimplencia = inadimplentes.rows.reduce((acc, aluno) => {
-      return acc + (parseFloat(aluno.valor_mensalidade) || 0);
+    const totalReceitas = Number(receitas._sum.valor || 0);
+    const totalDespesas = Number(despesas._sum.valor || 0);
+
+    // Calcula o valor total da inadimplência
+    const totalInadimplencia = inadimplentes.reduce((acc, aluno) => {
+      return acc + (Number(aluno.valor_mensalidade) || 0);
     }, 0);
 
     // Resposta formatada para o Frontend
@@ -76,19 +90,17 @@ router.get("/relatorio-mensal", async (req, res) => {
       total_receitas: totalReceitas,
       total_despesas: totalDespesas,
       saldo: totalReceitas - totalDespesas,
-      
-      alunos_status: parseInt(alunos.rows[0].total) || 0,
-      professores_status: parseInt(professores.rows[0].total) || 0,
-      
-      // Novos campos adicionados:
-      novas_matriculas: parseInt(novasMatriculas.rows[0].total) || 0,
-      inadimplencia_total: totalInadimplencia, // Valor monetário total que falta receber
-      
-      inadimplentes: inadimplentes.rows, // Lista detalhada para tabela 
-    });
 
+      alunos_status: totalAlunos,
+      professores_status: totalProfessores,
+
+      novas_matriculas: novasMatriculas,
+      inadimplencia_total: totalInadimplencia,
+
+      inadimplentes: inadimplentes,
+    });
   } catch (err) {
-    console.error("Erro no Relatório Mensal:", err);
+    console.error("Erro no Relatório Mensal:", err.message);
     res.status(500).json({ error: "Erro ao gerar relatório" });
   }
 });

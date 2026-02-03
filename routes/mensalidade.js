@@ -1,36 +1,36 @@
 import express from "express";
 import {
   cadastrarMensalidade,
-  deletar,
+  deletar, // Corresponde ao delete por ID
   listarMensalidade,
   mensalidadeByAluno,
-  mensalidadeByAlunoId,
-  deletarMensalidadeAluno,
+  atualizarMensalidade, // Importação corrigida
+  // deletarMensalidadeAluno, // Caso queira manter a exclusão vinculada (veja nota abaixo)
 } from "../controllers/mensalidade.js";
 import auth from "../middleware/auth.js";
 
 const router = express.Router();
 
+// Aplica autenticação em todas as rotas financeiras
 router.use(auth);
 
-// Cadastrar nova mensalidade
+// --- OPERAÇÕES DE CRIAÇÃO ---
+// Cadastrar nova mensalidade (O Controller já verifica duplicidade)
 router.post("/", cadastrarMensalidade);
 
-// Buscar todas as mensalidades de um aluno
+// --- OPERAÇÕES DE LEITURA ---
+// Buscar todas as mensalidades de um aluno específico (Para o extrato do pai/admin)
 router.get("/aluno/:id", mensalidadeByAluno);
 
-// Buscar uma mensalidade específica de um aluno
-router.get("/aluno/:alunoId/:receitaId", mensalidadeByAlunoId);
-
-// Buscar mensalidade por ID da mensalidade
+// Buscar uma mensalidade única pelo ID dela
 router.get("/:id", listarMensalidade);
 
-// Atualizar mensalidade
-router.put("/mensalidades/:id", mensalidadeController.atualizarMensalidade);
+// --- OPERAÇÕES DE ATUALIZAÇÃO ---
+// Atualizar dados da mensalidade (Valor, data, descrição)
+// Ajustado para remover a referência 'mensalidadeController.' que daria erro
+router.put("/:id", atualizarMensalidade);
 
-// Deletar mensalidade específica de um aluno
-router.delete("/aluno/:alunoId/:receitaId", deletarMensalidadeAluno);
-
+// --- OPERAÇÕES DE EXCLUSÃO ---
 // Deletar mensalidade por ID
 router.delete("/:id", deletar);
 

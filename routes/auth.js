@@ -1,7 +1,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
-import { pool } from "../db.js";
-import { signToken } from "../utils/jwt.js";
+import prisma from "../prisma.js"; // Import centralizado e com .js
+import { signToken } from "../utils/jwt.js"; // Certifique-se que jwt.js existe em utils
 
 const router = express.Router();
 
@@ -15,17 +15,14 @@ router.post("/login", async (req, res) => {
         .json({ message: "Email e senha são obrigatórios" });
     }
 
-    // 1. Busca usuário
-    const usuario = await pool.query(
-      "SELECT id, nome, email, senha, role, plano FROM users WHERE email = $1",
-      [email]
-    );
+    // 1. Busca usuário usando Prisma
+    const user = await prisma.users.findUnique({
+      where: { email: email },
+    });
 
-    if (usuario.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ message: "Usuário ou senha incorretos" });
     }
-
-    const user = usuario.rows[0];
 
     // 2. Verifica senha
     const senhaValida = await bcrypt.compare(senha, user.senha);
@@ -34,7 +31,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ message: "Usuário ou senha incorretos" });
     }
 
-    // 3. Regra de plano
+    // 3. Regra de plano (Bloqueia pais no plano básico)
     if (user.role === "responsavel" && user.plano === "basico") {
       return res.status(403).json({
         message:
@@ -47,6 +44,7 @@ router.post("/login", async (req, res) => {
       id: user.id,
       email: user.email,
       role: user.role,
+      nome: user.nome, // Adicionado nome ao token se for útil no frontend
     });
 
     // 5. Retorno
@@ -61,7 +59,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Erro no login:", err);
+    console.error("Erro no login:", err.message);
     res.status(500).json({ message: "Erro interno no servidor" });
   }
 });
