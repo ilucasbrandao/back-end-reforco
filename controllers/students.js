@@ -200,11 +200,23 @@ export const cadastrar = async (req, res) => {
 // Atualizar Aluno
 export const atualizar = async (req, res) => {
   const { id } = req.params;
-  const data = req.body;
+
+  // 1. Destruturamos o body para separar o que NÃO pode ser enviado ao Prisma
+  // Tiramos criado_em, receitas, movimentacoes, etc., para eles não irem no "...data"
+  const {
+    id: _id,
+    criado_em,
+    atualizado_em,
+    receitas,
+    responsaveis_alunos,
+    movimentacoes,
+    email_responsavel, // Tiramos também pois tratamos separado abaixo
+    ...data
+  } = req.body;
 
   try {
     const alunoAtualizado = await prisma.$transaction(async (tx) => {
-      // 1. Atualiza Aluno
+      // 2. Atualiza apenas os campos permitidos
       const updated = await tx.alunos.update({
         where: { id: parseInt(id) },
         data: {
@@ -218,12 +230,12 @@ export const atualizar = async (req, res) => {
           valor_mensalidade: data.valor_mensalidade
             ? parseFloat(data.valor_mensalidade)
             : undefined,
-          atualizado_em: new Date(),
+          atualizado_em: new Date(), // Forçamos a data atual de sistema
         },
       });
 
-      // 2. Lógica de Sincronização de Plano com User
-      if (data.plano) {
+      // 3. Lógica de Sincronização de Plano/Email com User (se houver)
+      if (data.plano || email_responsavel) {
         const vinculo = await tx.responsaveis_alunos.findFirst({
           where: { aluno_id: parseInt(id) },
           select: { responsavel_id: true },
@@ -234,7 +246,7 @@ export const atualizar = async (req, res) => {
             where: { id: vinculo.responsavel_id },
             data: {
               plano: data.plano === "premium" ? "premium" : "basico",
-              email: data.email_responsavel || undefined,
+              email: email_responsavel || undefined,
             },
           });
         }
@@ -248,7 +260,9 @@ export const atualizar = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Erro ao atualizar aluno:", error.message);
-    res.status(500).json({ error: "Erro ao atualizar aluno no banco." });
+    res.status(500).json({
+      error: "Erro ao atualizar aluno no banco. Verifique os dados enviados.",
+    });
   }
 };
 
