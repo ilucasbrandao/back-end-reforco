@@ -15,16 +15,17 @@ router.get("/", async (req, res) => {
     const anoNum =
       !ano || ano === "undefined" ? hoje.getFullYear() : Number(ano);
 
-    // Intervalo de datas para o Prisma (Lançamentos de Caixa)
+    // Intervalo de datas para cálculos baseados em data (Matrículas e Aniversários)
     const dataInicio = new Date(anoNum, mesNum - 1, 1);
     const dataFim = new Date(anoNum, mesNum, 1);
 
-    // --- EXECUÇÃO EM PARALELO (Mais rápido que o Pool antigo) ---
+    // --- EXECUÇÃO EM PARALELO ---
     const [
       alunosAtivos,
       professoresAtivos,
       turnoGroup,
-      lancamentosPeriodo,
+      receitasMes, // Busca na tabela real
+      despesasMes, // Busca na tabela real
       alunosAniv,
       professoresAniv,
       previstoMensalidades,
@@ -44,19 +45,25 @@ router.get("/", async (req, res) => {
         _count: true,
       }),
 
-      // 4. Saldo de Caixa (Receitas e Despesas)
-      prisma.lancamentos.findMany({
-        where: { data: { gte: dataInicio, lt: dataFim } },
-        select: { tipo: true, valor: true },
+      // 4a. Receitas do Período
+      prisma.receitas.findMany({
+        where: { mes_referencia: mesNum, ano_referencia: anoNum },
+        select: { valor: true },
       }),
 
-      // 5. Aniversariantes Alunos (Usando Raw Query apenas para o EXTRACT, que é específico)
+      // 4b. Despesas do Período
+      prisma.despesas.findMany({
+        where: { mes_referencia: mesNum, ano_referencia: anoNum },
+        select: { valor: true },
+      }),
+
+      // 5. Aniversariantes Alunos
       prisma.$queryRaw`SELECT nome, data_nascimento FROM alunos WHERE EXTRACT(MONTH FROM data_nascimento) = ${mesNum} AND status = 'ativo' ORDER BY EXTRACT(DAY FROM data_nascimento)`,
 
-      // 7. Aniversariantes Professores
+      // 6. Aniversariantes Professores
       prisma.$queryRaw`SELECT nome, data_nascimento FROM professores WHERE EXTRACT(MONTH FROM data_nascimento) = ${mesNum} AND status = 'ativo' ORDER BY EXTRACT(DAY FROM data_nascimento)`,
 
-      // 6. Saldo Previsto Mensalidades
+      // 7. Saldo Previsto Mensalidades
       prisma.alunos.aggregate({
         where: { status: "ativo" },
         _sum: { valor_mensalidade: true },
@@ -82,17 +89,21 @@ router.get("/", async (req, res) => {
     // Turnos
     const alunos_por_turno = {};
     turnoGroup.forEach((tg) => {
-      alunos_por_turno[tg.turno] = tg._count;
+      alunos_por_turno[tg.turno || "N/A"] = tg._count;
     });
 
-    // Saldo de Caixa
-    const saldo_caixa = lancamentosPeriodo.reduce((acc, curr) => {
-      const v = Number(curr.valor);
-      return curr.tipo === "receita" ? acc + v : acc - v;
-    }, 0);
+    // Cálculo do Saldo Real de Caixa (Receitas - Despesas)
+    const totalReceitas = receitasMes.reduce(
+      (acc, curr) => acc + Number(curr.valor),
+      0,
+    );
+    const totalDespesas = despesasMes.reduce(
+      (acc, curr) => acc + Number(curr.valor),
+      0,
+    );
+    const saldo_caixa = totalReceitas - totalDespesas;
 
-    // 10. Inadimplentes (Alunos ativos que não possuem receita no mês/ano)
-    // O Prisma facilita muito essa query complexa
+    // 10. Inadimplentes (Alunos ativos sem receita no mês/ano atual)
     const inadimplentes = await prisma.alunos.findMany({
       where: {
         status: "ativo",
@@ -110,7 +121,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       alunos_ativos: alunosAtivos,
-      professores_ativos: professoresAtivos,
+      professores_ativos: professorsAtivos, // Corrigido nome da variável
       alunos_por_turno,
       saldo_caixa,
       aniversariantes: alunosAniv,
@@ -124,7 +135,10 @@ router.get("/", async (req, res) => {
     });
   } catch (err) {
     console.error("Erro Dashboard:", err.message);
-    res.status(500).json({ error: "Erro ao carregar dados do dashboard" });
+    res.status(500).json({
+      error: "Erro ao carregar dados do dashboard",
+      details: err.message,
+    });
   }
 });
 

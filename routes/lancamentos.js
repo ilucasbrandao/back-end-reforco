@@ -10,54 +10,75 @@ router.get("/", async (req, res) => {
   try {
     const { inicio, fim } = req.query;
 
-    // Filtro de data flexível
-    const whereClause = {};
+    // Filtro de data para Receitas (data_pagamento) e Despesas (data_vencimento ou data_pagamento)
+    const filterReceita = {};
+    const filterDespesa = {};
+
     if (inicio || fim) {
-      whereClause.data = {};
-      if (inicio) whereClause.data.gte = new Date(inicio);
-      if (fim) whereClause.data.lte = new Date(fim);
+      filterReceita.data_pagamento = {};
+      filterDespesa.data_pagamento = {}; // Pode ajustar para data_vencimento se preferir
+
+      if (inicio) {
+        filterReceita.data_pagamento.gte = new Date(inicio);
+        filterDespesa.data_pagamento.gte = new Date(inicio);
+      }
+      if (fim) {
+        filterReceita.data_pagamento.lte = new Date(fim);
+        filterDespesa.data_pagamento.lte = new Date(fim);
+      }
     }
 
-    // 1️⃣ Buscar lançamentos com suas relações
-    const lancamentos = await prisma.lancamentos.findMany({
-      where: whereClause,
-      include: {
-        alunos: {
-          select: { nome: true },
+    // 1️⃣ Buscar Receitas e Despesas em paralelo
+    const [receitas, despesas] = await Promise.all([
+      prisma.receitas.findMany({
+        where: filterReceita,
+        include: {
+          alunos: { select: { nome: true } },
         },
-        professores: {
-          select: { nome: true },
+        orderBy: { data_pagamento: "desc" },
+      }),
+      prisma.despesas.findMany({
+        where: filterDespesa,
+        include: {
+          professores: { select: { nome: true } },
         },
-        receitas: {
-          select: { data_pagamento: true, valor: true },
-        },
-      },
-      orderBy: {
-        data: "desc",
-      },
-    });
+        orderBy: { data_pagamento: "desc" },
+      }),
+    ]);
 
-    // 2️⃣ Formatar os dados para manter a compatibilidade com o seu Frontend
-    const formatados = lancamentos.map((l) => {
-      // Prioriza a data de pagamento da receita se existir, senão usa a data do lançamento
-      const dataFinal = l.receitas?.data_pagamento
-        ? l.receitas.data_pagamento.toISOString().split("T")[0]
-        : l.data.toISOString().split("T")[0];
-
-      return {
-        lancamento_id: l.lancamento_id,
-        tipo: l.tipo,
-        origem_id: l.origem_id,
-        descricao: l.descricao,
-        valor: Number(l.valor),
+    // 2️⃣ Formatar e Unificar (Transformar tudo no formato "Lancamento")
+    const formatados = [
+      ...receitas.map((r) => ({
+        id: `rec_${r.id}`,
+        tipo: "receita",
+        descricao: `Mensalidade: ${r.alunos?.nome || "Aluno"}`,
+        valor: Number(r.valor),
         status: "Finalizada",
-        data: dataFinal,
-        nome_aluno: l.alunos?.nome || null,
-        nome_professor: l.professores?.nome || null,
-      };
-    });
+        data: r.data_pagamento
+          ? r.data_pagamento.toISOString().split("T")[0]
+          : null,
+        nome_aluno: r.alunos?.nome || null,
+        nome_professor: null,
+      })),
+      ...despesas.map((d) => ({
+        id: `des_${d.id}`,
+        tipo: "despesa",
+        descricao:
+          d.descricao || `Pagamento: ${d.professores?.nome || "Professor"}`,
+        valor: Number(d.valor),
+        status: "Finalizada",
+        data: d.data_pagamento
+          ? d.data_pagamento.toISOString().split("T")[0]
+          : null,
+        nome_aluno: null,
+        nome_professor: d.professores?.nome || null,
+      })),
+    ];
 
-    // 3️⃣ Calcular resumo (Total de Receitas, Despesas e Saldo)
+    // Ordenar por data decrescente
+    formatados.sort((a, b) => new Date(b.data) - new Date(a.data));
+
+    // 3️⃣ Calcular resumo
     const resumo = formatados.reduce(
       (acc, curr) => {
         if (curr.tipo === "receita") {
@@ -78,7 +99,10 @@ router.get("/", async (req, res) => {
     });
   } catch (err) {
     console.error("❌ Erro ao buscar lançamentos e resumo:", err.message);
-    res.status(500).json({ error: "Erro ao buscar lançamentos e resumo" });
+    res.status(500).json({
+      error: "Erro ao buscar lançamentos e resumo",
+      details: err.message,
+    });
   }
 });
 
