@@ -33,14 +33,14 @@ router.get("/", async (req, res) => {
       prisma.receitas.findMany({
         where: filterReceita,
         include: {
-          alunos: { select: { nome: true } },
+          aluno: { select: { nome: true } },
         },
         orderBy: { data_pagamento: "desc" },
       }),
       prisma.despesas.findMany({
         where: filterDespesa,
         include: {
-          professores: { select: { nome: true } },
+          professor: { select: { nome: true } },
         },
         orderBy: { data_pagamento: "desc" },
       }),
@@ -51,27 +51,27 @@ router.get("/", async (req, res) => {
       ...receitas.map((r) => ({
         id: `rec_${r.id}`,
         tipo: "receita",
-        descricao: `Mensalidade: ${r.alunos?.nome || "Aluno"}`,
+        descricao: `Mensalidade: ${r.aluno?.nome || "Aluno"}`,
         valor: Number(r.valor),
         status: "Finalizada",
         data: r.data_pagamento
           ? r.data_pagamento.toISOString().split("T")[0]
           : null,
-        nome_aluno: r.alunos?.nome || null,
+        nome_aluno: r.aluno?.nome || null,
         nome_professor: null,
       })),
       ...despesas.map((d) => ({
         id: `des_${d.id}`,
         tipo: "despesa",
         descricao:
-          d.descricao || `Pagamento: ${d.professores?.nome || "Professor"}`,
+          d.descricao || `Pagamento: ${d.professor?.nome || "Professor"}`,
         valor: Number(d.valor),
         status: "Finalizada",
         data: d.data_pagamento
           ? d.data_pagamento.toISOString().split("T")[0]
           : null,
         nome_aluno: null,
-        nome_professor: d.professores?.nome || null,
+        nome_professor: d.professor?.nome || null,
       })),
     ];
 
