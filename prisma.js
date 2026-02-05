@@ -1,29 +1,8 @@
-import { createRequire } from "module";
-import path from "path";
-import { fileURLToPath } from "url";
+import { PrismaClient } from "@prisma/client";
 
-const require = createRequire(import.meta.url);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const globalForPrisma = global;
+const prisma = globalForPrisma.prisma || new PrismaClient();
 
-// Forçamos o caminho para dentro da node_modules onde o Prisma DEVE estar
-const clientPath = path.join(
-  __dirname,
-  "node_modules",
-  "@prisma",
-  "client",
-  "index.js",
-);
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
-let PrismaClient;
-try {
-  // Tenta carregar do caminho padrão gerado pelo npx prisma generate
-  const prismaModule = require("@prisma/client");
-  PrismaClient = prismaModule.PrismaClient;
-} catch (e) {
-  console.log("⚠️ Tentando carregamento alternativo do motor...");
-  const alternatePath = require(".prisma/client/index.js");
-  PrismaClient = alternatePath.PrismaClient;
-}
-
-const prisma = new PrismaClient();
 export default prisma;
