@@ -121,7 +121,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       alunos_ativos: alunosAtivos,
-      professores_ativos: professorsAtivos, // Corrigido nome da variável
+      professores_ativos: professoresAtivos, // Corrigido nome da variável
       alunos_por_turno,
       saldo_caixa,
       aniversariantes: alunosAniv,
