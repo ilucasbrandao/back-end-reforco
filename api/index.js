@@ -17,7 +17,6 @@ import feedbackRoutes from "../routes/feedbacks.js";
 import routeMensalidade from "../routes/mensalidade.js";
 import routeDespesas from "../routes/despesas.js";
 import lancamentosRouter from "../routes/lancamentos.js";
-import inadiplentesRouter from "../routes/inadimplentes.js";
 import fecharCaixa from "../routes/caixa.js";
 import resumoDashboard from "../routes/dashboard.js";
 import relatorioRoutes from "../routes/relatorio.js";
@@ -84,7 +83,6 @@ app.use("/receitas", routeMensalidade);
 app.use("/despesa", routeDespesas);
 app.use("/lancamentos", lancamentosRouter);
 app.use("/fechar-caixa-mes", fecharCaixa);
-app.use("/", auth, inadiplentesRouter);
 
 // Gestão
 app.use("/dashboard", resumoDashboard);
