@@ -1,6 +1,7 @@
 import { Router } from "express";
 import prisma from "../prisma.js"; // Import centralizado
 import auth from "../middleware/auth.js";
+import { da } from "zod/locales";
 
 const router = Router();
 router.use(auth);
@@ -19,18 +20,26 @@ router.get("/", async (req, res) => {
     const dataInicio = new Date(anoNum, mesNum - 1, 1);
     const dataFim = new Date(anoNum, mesNum, 1);
 
+    const mesAtual = hoje.getMonth() + 1;
+    const anoAtual = hoje.getFullYear();
+
+    // Aluno só é cobrado se tiver pelo menos 1 mês de casa (evita cobrar aluno novo)
+    const dataCorte = new Date(anoNum, mesNum - 1, hoje);
+    const ehMesAtual = mesNum === mesAtual && anoNum === anoAtual;
+
     // --- EXECUÇÃO EM PARALELO ---
     const [
       alunosAtivos,
       professoresAtivos,
       turnoGroup,
-      receitasMes, // Busca na tabela real
-      despesasMes, // Busca na tabela real
+      receitasMes,
+      despesasMes,
       alunosAniv,
       professoresAniv,
       previstoMensalidades,
       previstoSalarios,
       matriculadosMes,
+      candidatosInadimplentes, // Busca dos inadimplentes com inteligência de vencimento
     ] = await Promise.all([
       // 1. Alunos Ativos
       prisma.alunos.count({ where: { status: "ativo" } }),
@@ -82,6 +91,26 @@ router.get("/", async (req, res) => {
           data_matricula: { gte: dataInicio, lt: dataFim },
         },
       }),
+
+      // 10. Inadimplentes com Inteligência de Vencimento
+      prisma.alunos.findMany({
+        where: {
+          status: "ativo",
+          data_matricula: { lt: dataCorte },
+          NOT: {
+            receitas: {
+              some: { mes_referencia: mesNum, ano_referencia: anoNum },
+            },
+          },
+        },
+        select: {
+          id: true,
+          nome: true,
+          valor_mensalidade: true,
+          telefone: true,
+          dia_vencimento: true,
+        },
+      }),
     ]);
 
     // --- PROCESSAMENTO DOS RESULTADOS ---
@@ -103,20 +132,12 @@ router.get("/", async (req, res) => {
     );
     const saldo_caixa = totalReceitas - totalDespesas;
 
-    // 10. Inadimplentes (Alunos ativos sem receita no mês/ano atual)
-    const inadimplentes = await prisma.alunos.findMany({
-      where: {
-        status: "ativo",
-        NOT: {
-          receitas: {
-            some: {
-              mes_referencia: mesNum,
-              ano_referencia: anoNum,
-            },
-          },
-        },
-      },
-      select: { id: true, nome: true, valor_mensalidade: true, telefone: true },
+    // Inadimplentes com Inteligência de Vencimento
+    const inadimplentes = candidatosInadimplentes.filter((aluno) => {
+      if (!ehMesAtual) return true;
+
+      const vencimento = Number(aluno.dia_vencimento);
+      return vencimento < diaAtual;
     });
 
     res.json({
@@ -129,9 +150,9 @@ router.get("/", async (req, res) => {
       saldo_previsto_mensalidades: Number(
         previstoMensalidades._sum.valor_mensalidade || 0,
       ),
+      inadimplentes,
       saldo_previsto_salarios: Number(previstoSalarios._sum.salario || 0),
       matriculados_mes_atual: matriculadosMes,
-      inadimplentes,
     });
   } catch (err) {
     console.error("Erro Dashboard:", err.message);
