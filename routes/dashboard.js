@@ -9,6 +9,7 @@ router.use(auth);
 router.get("/", async (req, res) => {
   try {
     const hoje = new Date();
+    const diaAtual = hoje.getDate();
     let { mes, ano } = req.query;
 
     const mesNum =
@@ -24,7 +25,7 @@ router.get("/", async (req, res) => {
     const anoAtual = hoje.getFullYear();
 
     // Aluno só é cobrado se tiver pelo menos 1 mês de casa (evita cobrar aluno novo)
-    const dataCorte = new Date(anoNum, mesNum - 1, hoje);
+    const dataCorte = new Date(anoNum, mesNum - 1, hoje.getDate());
     const ehMesAtual = mesNum === mesAtual && anoNum === anoAtual;
 
     // --- EXECUÇÃO EM PARALELO ---
