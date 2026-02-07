@@ -1,5 +1,5 @@
+import bcrypt from "bcrypt";
 import prisma from "../prisma.js";
-import bcrypt from "bcryptjs";
 
 // =========================================================================
 // FUNÇÕES AUXILIARES (DATAS)
