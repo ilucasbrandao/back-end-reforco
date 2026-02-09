@@ -1,27 +1,16 @@
 import express from "express";
-import {
-  listarAlunos,
-  getAlunoComMovimentacoes,
-  cadastrar,
-  atualizar,
-  deletar,
-  listarMeusFilhos,
-  atualizarFotoAluno,
-} from "../controllers/students.js";
-
-import path from "path";
-import { fileURLToPath } from "url";
 import auth from "../middleware/auth.js";
+import { StudentController } from "../controllers/students.js";
+import path from "path";
 import { createUploadMiddleware } from "../middleware/upload.js";
+import { UPLOADS_ROOT } from "../config/uploads.js"; // Importação crucial
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configuração de Upload de Foto
-const uploadFotoAluno = createUploadMiddleware(
-  path.join(__dirname, "../../uploads/alunos/fotos"), // Ajustado caminho se necessário
+// Configuração de Upload para Alunos
+// Caminho Final: .../BACKEND/uploads/alunos/fotos
+const uploadAlunoFoto = createUploadMiddleware(
+  path.join(UPLOADS_ROOT, "alunos/fotos"),
   {
-    allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+    allowedMimeTypes: ["image/jpeg", "image/png", "image/jpg", "image/webp"],
     maxSizeMB: 5,
     maxFiles: 1,
   },
@@ -29,35 +18,36 @@ const uploadFotoAluno = createUploadMiddleware(
 
 const router = express.Router();
 
-// --- 1. ROTAS FIXAS / ESPECÍFICAS (Sempre no topo) ---
+// Aplica autenticação em todas as rotas (Opcional, mas recomendado)
+// Se quiser deixar listarAlunos público, mova o auth apenas para as rotas específicas
+// router.use(auth);
 
-// Rota para o Pai ver apenas os seus dependentes
-router.get("/meus-filhos", auth, listarMeusFilhos);
+// --- ROTAS ---
 
-// Listar todos os alunos (Geralmente usada pelo Admin/Professor)
-// DICA: Você pode adicionar 'auth' aqui depois para proteger a lista geral
-router.get("/", auth, listarAlunos);
+// 1. Meus Filhos (Responsável)
+router.get("/meus-filhos", auth, StudentController.listarMeusFilhos);
 
-// Cadastrar novo aluno
-router.post("/", auth, cadastrar);
+// 2. Listar Todos (Admin/Prof)
+router.get("/", auth, StudentController.listarAlunos);
 
-// --- 2. ROTAS COM PARÂMETROS (:id) ---
+// 3. Cadastrar (Admin)
+router.post("/", auth, StudentController.cadastrar);
 
-// Detalhes do aluno + Mensalidades (O Prisma já traz tudo junto agora)
-router.get("/:id", auth, getAlunoComMovimentacoes);
+// 4. Detalhes (Admin/Prof/Responsável - validação interna no controller idealmente)
+router.get("/:id", auth, StudentController.getAlunoComMovimentacoes);
 
-// Atualizar dados cadastrais (Incluindo o novo dia_vencimento)
-router.put("/:id", auth, atualizar);
+// 5. Atualizar Dados (Admin)
+router.put("/:id", auth, StudentController.atualizar);
 
-// Rota específica para atualização de foto (Usa PATCH por ser alteração parcial)
+// 6. Upload de Foto (Responsável/Admin)
 router.patch(
   "/:id/foto",
   auth,
-  uploadFotoAluno.single("foto"),
-  atualizarFotoAluno,
+  uploadAlunoFoto.single("foto"), // Middleware do Multer processa o arquivo
+  StudentController.uploadFoto, // Controller salva a URL no banco
 );
 
-// Deletar aluno
-router.delete("/:id", auth, deletar);
+// 7. Deletar (Admin)
+router.delete("/:id", auth, StudentController.deletar);
 
 export default router;

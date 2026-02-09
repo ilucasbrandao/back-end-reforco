@@ -8,7 +8,6 @@ import prisma from "../prisma.js";
 function formatLocalDate(date) {
   if (!date) return null;
   const d = new Date(date);
-  // Ajusta para o fuso local para evitar que a data "volte um dia"
   d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
   return d.toISOString().split("T")[0];
 }
@@ -32,302 +31,297 @@ const formatDates = (aluno) => {
 // CONTROLLERS
 // =========================================================================
 
-// Listar todos os alunos
-export const listarAlunos = async (req, res) => {
-  try {
-    const alunos = await prisma.alunos.findMany({
-      orderBy: { id: "asc" },
-    });
-    res.status(200).json(alunos.map(formatDates));
-  } catch (error) {
-    console.error("❌ Erro ao listar alunos:", error.message);
-    res.status(500).json({ error: "Erro ao buscar alunos" });
-  }
-};
-
-// Buscar aluno por ID com Movimentações e Dados de Acesso
-export const getAlunoComMovimentacoes = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const aluno = await prisma.alunos.findUnique({
-      where: { id: parseInt(id) },
-      include: {
-        receitas: { orderBy: { data_pagamento: "desc" } },
-        responsaveis_alunos: {
-          include: { responsavel: true },
-        },
-      },
-    });
-
-    if (!aluno) {
-      return res.status(404).json({ message: "Aluno não encontrado!" });
+export const StudentController = {
+  // Listar todos os alunos
+  async listarAlunos(req, res) {
+    try {
+      const alunos = await prisma.alunos.findMany({
+        orderBy: { id: "asc" },
+      });
+      res.status(200).json(alunos.map(formatDates));
+    } catch (error) {
+      console.error("❌ Erro ao listar alunos:", error.message);
+      res.status(500).json({ error: "Erro ao buscar alunos" });
     }
+  },
 
-    // Extrai dados do primeiro responsável vinculado
-    const vinculo = aluno.responsaveis_alunos[0];
-    const email_responsavel = vinculo?.responsavel?.email || "";
-    const planoAcesso = vinculo?.responsavel?.plano || "basico";
+  // Listar filhos do Responsável Logado
+  async listarMeusFilhos(req, res) {
+    try {
+      const idResponsavel = req.userId;
+      if (!idResponsavel)
+        return res.status(401).json({ error: "Não autenticado." });
 
-    res.json({
-      ...formatDates(aluno),
-      plano: aluno.plano || planoAcesso,
-      email_responsavel,
-      movimentacoes: aluno.receitas.map((m) => {
-        // Correção de fuso para o pai/extrato
-        const d = new Date(m.data_pagamento);
-        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
-        return {
-          ...m,
-          data_pagamento: d.toISOString().split("T")[0],
-        };
-      }),
-    });
-  } catch (error) {
-    console.error("❌ Erro ao buscar aluno:", error.message);
-    res.status(500).json({ error: "Erro ao buscar aluno" });
-  }
-};
-
-// Cadastrar Aluno com Transação Inteligente
-export const cadastrar = async (req, res) => {
-  const {
-    nome,
-    data_nascimento,
-    responsavel,
-    telefone,
-    data_matricula,
-    valor_mensalidade,
-    serie,
-    turno,
-    observacao,
-    status,
-    plano,
-    email_responsavel,
-    dia_vencimento,
-  } = req.body;
-
-  if (plano === "premium" && !email_responsavel) {
-    return res
-      .status(400)
-      .json({ error: "Email obrigatório para plano Premium." });
-  }
-
-  try {
-    const resultado = await prisma.$transaction(async (tx) => {
-      // 1. Criar Aluno
-      const novoAluno = await tx.alunos.create({
-        data: {
-          nome,
-          data_nascimento: data_nascimento ? new Date(data_nascimento) : null,
-          responsavel,
-          telefone,
-          data_matricula: data_matricula
-            ? new Date(data_matricula)
-            : new Date(),
-          valor_mensalidade: valor_mensalidade
-            ? parseFloat(valor_mensalidade)
-            : null,
-          serie,
-          turno,
-          observacao,
-          status: status || "ativo",
-          plano: plano || "padrao",
-          dia_vencimento, // A nova coluna salva aqui
+      // Busca alunos onde EXISTE um vínculo com este responsável
+      const alunos = await prisma.alunos.findMany({
+        where: {
+          responsaveis_alunos: {
+            some: { responsavel_id: idResponsavel },
+          },
         },
       });
 
-      let dadosAcesso = null;
+      res.status(200).json(alunos.map(formatDates));
+    } catch (error) {
+      console.error("❌ Erro ao listar meus filhos:", error.message);
+      res.status(500).json({ error: "Erro ao buscar alunos vinculados." });
+    }
+  },
 
-      // 2. Lógica Premium
-      if (plano === "premium") {
-        let user = await tx.users.findUnique({
-          where: { email: email_responsavel },
-        });
+  // Buscar aluno por ID com Movimentações
+  async getAlunoComMovimentacoes(req, res) {
+    try {
+      const { id } = req.params;
 
-        if (user) {
-          if (user.plano !== "premium") {
-            await tx.users.update({
-              where: { id: user.id },
-              data: { plano: "premium" },
-            });
-          }
-        } else {
-          const senhaLimpa = data_nascimento
-            ? data_nascimento.replace(/[^0-9]/g, "")
-            : "123456";
-          const salt = await bcrypt.genSalt(10);
-          const senhaHash = await bcrypt.hash(senhaLimpa, salt);
+      const aluno = await prisma.alunos.findUnique({
+        where: { id: parseInt(id) },
+        include: {
+          receitas: { orderBy: { data_pagamento: "desc" } },
+          responsaveis_alunos: {
+            include: { responsavel: true },
+          },
+        },
+      });
 
-          user = await tx.users.create({
-            data: {
-              nome: responsavel,
-              email: email_responsavel,
-              senha: senhaHash,
-              role: "responsavel",
-              plano: "premium",
-            },
-          });
-        }
+      if (!aluno) {
+        return res.status(404).json({ message: "Aluno não encontrado!" });
+      }
 
-        await tx.responsaveis_alunos.create({
+      const vinculo = aluno.responsaveis_alunos[0];
+      const email_responsavel = vinculo?.responsavel?.email || "";
+      const planoAcesso = vinculo?.responsavel?.plano || "basico";
+
+      res.json({
+        ...formatDates(aluno),
+        plano: aluno.plano || planoAcesso,
+        email_responsavel,
+        movimentacoes: aluno.receitas.map((m) => {
+          const d = new Date(m.data_pagamento);
+          d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+          return {
+            ...m,
+            data_pagamento: d.toISOString().split("T")[0],
+          };
+        }),
+      });
+    } catch (error) {
+      console.error("❌ Erro ao buscar aluno:", error.message);
+      res.status(500).json({ error: "Erro ao buscar aluno" });
+    }
+  },
+
+  // Cadastrar Aluno
+  async cadastrar(req, res) {
+    const {
+      nome,
+      data_nascimento,
+      responsavel,
+      telefone,
+      data_matricula,
+      valor_mensalidade,
+      serie,
+      turno,
+      observacao,
+      status,
+      plano,
+      email_responsavel,
+      dia_vencimento,
+    } = req.body;
+
+    if (plano === "premium" && !email_responsavel) {
+      return res
+        .status(400)
+        .json({ error: "Email obrigatório para plano Premium." });
+    }
+
+    try {
+      const resultado = await prisma.$transaction(async (tx) => {
+        const novoAluno = await tx.alunos.create({
           data: {
-            responsavel_id: user.id,
-            aluno_id: novoAluno.id,
-            parentesco: "Responsável",
+            nome,
+            data_nascimento: data_nascimento ? new Date(data_nascimento) : null,
+            responsavel,
+            telefone,
+            data_matricula: data_matricula
+              ? new Date(data_matricula)
+              : new Date(),
+            valor_mensalidade: valor_mensalidade
+              ? parseFloat(valor_mensalidade)
+              : null,
+            serie,
+            turno,
+            observacao,
+            status: status || "ativo",
+            plano: plano || "padrao",
+            dia_vencimento,
           },
         });
 
-        dadosAcesso = {
-          email: email_responsavel,
-          msg: "Acesso Premium ativo!",
-        };
-      }
+        let dadosAcesso = null;
 
-      return { novoAluno, dadosAcesso };
-    });
+        if (plano === "premium" && email_responsavel) {
+          let user = await tx.users.findUnique({
+            where: { email: email_responsavel },
+          });
 
-    res.status(201).json({
-      message: "Aluno cadastrado com sucesso.",
-      student: formatDates(resultado.novoAluno),
-      acesso: resultado.dadosAcesso,
-    });
-  } catch (error) {
-    console.error("❌ Erro ao inserir aluno:", error.message);
-    res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
-  }
-};
+          if (user) {
+            if (user.plano !== "premium") {
+              await tx.users.update({
+                where: { id: user.id },
+                data: { plano: "premium" },
+              });
+            }
+          } else {
+            const senhaLimpa = data_nascimento
+              ? data_nascimento.replace(/[^0-9]/g, "")
+              : "123456";
+            const salt = await bcrypt.genSalt(10);
+            const senhaHash = await bcrypt.hash(senhaLimpa, salt);
 
-// Atualizar Aluno
-export const atualizar = async (req, res) => {
-  const { id } = req.params;
+            user = await tx.users.create({
+              data: {
+                nome: responsavel,
+                email: email_responsavel,
+                senha: senhaHash,
+                role: "responsavel",
+                plano: "premium",
+              },
+            });
+          }
 
-  // 1. Destruturamos o body para separar o que NÃO pode ser enviado ao Prisma
-  // Tiramos criado_em, receitas, movimentacoes, etc., para eles não irem no "...data"
-  const {
-    id: _id,
-    criado_em,
-    atualizado_em,
-    receitas,
-    responsaveis_alunos,
-    movimentacoes,
-    email_responsavel, // Tiramos também pois tratamos separado abaixo
-    ...data
-  } = req.body;
-
-  try {
-    const alunoAtualizado = await prisma.$transaction(async (tx) => {
-      // 2. Atualiza apenas os campos permitidos
-      const updated = await tx.alunos.update({
-        where: { id: parseInt(id) },
-        data: {
-          ...data,
-          data_nascimento: data.data_nascimento
-            ? new Date(data.data_nascimento)
-            : undefined,
-          data_matricula: data.data_matricula
-            ? new Date(data.data_matricula)
-            : undefined,
-          valor_mensalidade: data.valor_mensalidade
-            ? parseFloat(data.valor_mensalidade)
-            : undefined,
-          atualizado_em: new Date(), // Forçamos a data atual de sistema
-        },
-      });
-
-      // 3. Lógica de Sincronização de Plano/Email com User (se houver)
-      if (data.plano || email_responsavel) {
-        const vinculo = await tx.responsaveis_alunos.findFirst({
-          where: { aluno_id: parseInt(id) },
-          select: { responsavel_id: true },
-        });
-
-        if (vinculo) {
-          await tx.users.update({
-            where: { id: vinculo.responsavel_id },
+          await tx.responsaveis_alunos.create({
             data: {
-              plano: data.plano === "premium" ? "premium" : "basico",
-              email: email_responsavel || undefined,
+              responsavel_id: user.id,
+              aluno_id: novoAluno.id,
+              parentesco: "Responsável",
             },
           });
+
+          dadosAcesso = {
+            email: email_responsavel,
+            msg: "Acesso Premium ativo!",
+          };
         }
+
+        return { novoAluno, dadosAcesso };
+      });
+
+      res.status(201).json({
+        message: "Aluno cadastrado com sucesso.",
+        student: formatDates(resultado.novoAluno),
+        acesso: resultado.dadosAcesso,
+      });
+    } catch (error) {
+      console.error("❌ Erro ao inserir aluno:", error.message);
+      res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
+    }
+  },
+
+  // Atualizar Aluno
+  async atualizar(req, res) {
+    const { id } = req.params;
+
+    // Remove campos que não devem ser atualizados diretamente ou que precisam de tratamento especial
+    const {
+      id: _id,
+      criado_em,
+      atualizado_em,
+      receitas,
+      responsaveis_alunos,
+      movimentacoes,
+      email_responsavel,
+      ...data
+    } = req.body;
+
+    try {
+      const alunoAtualizado = await prisma.$transaction(async (tx) => {
+        const updated = await tx.alunos.update({
+          where: { id: parseInt(id) },
+          data: {
+            ...data,
+            data_nascimento: data.data_nascimento
+              ? new Date(data.data_nascimento)
+              : undefined,
+            data_matricula: data.data_matricula
+              ? new Date(data.data_matricula)
+              : undefined,
+            valor_mensalidade: data.valor_mensalidade
+              ? parseFloat(data.valor_mensalidade)
+              : undefined,
+            atualizado_em: new Date(),
+          },
+        });
+
+        if (data.plano || email_responsavel) {
+          const vinculo = await tx.responsaveis_alunos.findFirst({
+            where: { aluno_id: parseInt(id) },
+            select: { responsavel_id: true },
+          });
+
+          if (vinculo) {
+            await tx.users.update({
+              where: { id: vinculo.responsavel_id },
+              data: {
+                plano: data.plano === "premium" ? "premium" : "basico",
+                email: email_responsavel || undefined,
+              },
+            });
+          }
+        }
+        return updated;
+      });
+
+      res.status(200).json({
+        message: "Aluno atualizado!",
+        student: formatDates(alunoAtualizado),
+      });
+    } catch (error) {
+      console.error("❌ Erro ao atualizar aluno:", error.message);
+      res.status(500).json({
+        error: "Erro ao atualizar aluno no banco.",
+      });
+    }
+  },
+
+  // Deletar Aluno
+  async deletar(req, res) {
+    try {
+      const { id } = req.params;
+      const deletado = await prisma.alunos.delete({
+        where: { id: parseInt(id) },
+      });
+      res.status(200).json({
+        message: "Aluno deletado com sucesso",
+        student: formatDates(deletado),
+      });
+    } catch (error) {
+      console.error("❌ Erro ao deletar aluno:", error.message);
+      res.status(500).json({ error: "Aluno não encontrado ou erro no banco." });
+    }
+  },
+
+  // Atualizar Foto do Aluno (Usado pelo Pai ou Admin)
+  async uploadFoto(req, res) {
+    try {
+      const { id } = req.params;
+      const alunoId = parseInt(id);
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhuma foto enviada." });
       }
-      return updated;
-    });
 
-    res.status(200).json({
-      message: "Aluno atualizado!",
-      student: formatDates(alunoAtualizado),
-    });
-  } catch (error) {
-    console.error("❌ Erro ao atualizar aluno:", error.message);
-    res.status(500).json({
-      error: "Erro ao atualizar aluno no banco. Verifique os dados enviados.",
-    });
-  }
-};
+      // Constrói a URL pública
+      const fotoUrl = `${req.protocol}://${req.get("host")}/uploads/alunos/fotos/${req.file.filename}`;
 
-// Deletar Aluno
-export const deletar = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletado = await prisma.alunos.delete({
-      where: { id: parseInt(id) },
-    });
-    res.status(200).json({
-      message: "Aluno deletado com sucesso",
-      student: formatDates(deletado),
-    });
-  } catch (error) {
-    console.error("❌ Erro ao deletar aluno:", error.message);
-    res.status(500).json({ error: "Aluno não encontrado ou erro no banco." });
-  }
-};
+      const alunoAtualizado = await prisma.alunos.update({
+        where: { id: alunoId },
+        data: { foto_url: fotoUrl },
+      });
 
-// Listar filhos do Responsável Logado
-export const listarMeusFilhos = async (req, res) => {
-  try {
-    const idResponsavel = req.userId;
-    if (!idResponsavel)
-      return res.status(401).json({ error: "Não autenticado." });
-
-    const filhos = await prisma.alunos.findMany({
-      where: {
-        responsaveis_alunos: {
-          some: { responsavel_id: idResponsavel },
-        },
-      },
-    });
-
-    res.status(200).json(filhos.map(formatDates));
-  } catch (error) {
-    res.status(500).json({ error: "Erro ao buscar alunos vinculados." });
-  }
-};
-
-export const atualizarFotoAluno = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const responsavelId = req.userId;
-
-    if (!req.file)
-      return res.status(400).json({ error: "Nenhuma foto enviada." });
-
-    const vinculo = await prisma.responsaveis_alunos.findFirst({
-      where: { aluno_id: parseInt(id), responsavel_id: responsavelId },
-    });
-
-    if (!vinculo) return res.status(403).json({ error: "Sem permissão." });
-
-    const fotoUrl = `${req.protocol}://${req.get("host")}/uploads/alunos/fotos/${req.file.filename}`;
-
-    await prisma.alunos.update({
-      where: { id: parseInt(id) },
-      data: { foto_url: fotoUrl },
-    });
-
-    res.status(200).json({ foto_url: fotoUrl });
-  } catch (error) {
-    res.status(500).json({ error: "Erro ao atualizar foto." });
-  }
+      res.status(200).json(alunoAtualizado);
+    } catch (error) {
+      console.error("Erro ao atualizar foto:", error);
+      res.status(500).json({ error: "Erro ao salvar foto." });
+    }
+  },
 };
