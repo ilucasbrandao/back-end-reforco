@@ -72,41 +72,44 @@ export const FeedbackController = {
         fotos_existentes,
       } = req.body;
 
-      // 🔁 Com Prisma + JSON, o parsing só é necessário se vier como String via FormData
-      const pedagogicoParsed =
-        typeof avaliacao_pedagogica === "string"
-          ? JSON.parse(avaliacao_pedagogica)
-          : avaliacao_pedagogica;
-      const psicoParsed =
-        typeof avaliacao_psico === "string"
-          ? JSON.parse(avaliacao_psico)
-          : avaliacao_psico;
+      // Parsing seguro
+      let pedagogicoParsed = {};
+      let psicoParsed = {};
 
-      // Gerar URLs das novas fotos
+      try {
+        pedagogicoParsed =
+          typeof avaliacao_pedagogica === "string"
+            ? JSON.parse(avaliacao_pedagogica)
+            : avaliacao_pedagogica || {};
+        psicoParsed =
+          typeof avaliacao_psico === "string"
+            ? JSON.parse(avaliacao_psico)
+            : avaliacao_psico || {};
+      } catch (e) {
+        return res
+          .status(400)
+          .json({ error: "Erro no formato dos dados JSON" });
+      }
+
+      // URLs das fotos
       const novasFotos =
         req.files?.map(
           (file) =>
             `${req.protocol}://${req.get("host")}/uploads/feedbacks/imagens/${file.filename}`,
         ) || [];
 
+      // Como é criação, fotos_existentes geralmente é null, mas mantemos a lógica
       let fotosFinais = [...novasFotos];
-      if (fotos_existentes) {
-        const existentes =
-          typeof fotos_existentes === "string"
-            ? JSON.parse(fotos_existentes)
-            : fotos_existentes;
-        if (Array.isArray(existentes))
-          fotosFinais = [...existentes, ...fotosFinais];
-      }
 
+      // Salvar no Banco
       const novoFeedback = await prisma.feedbacks.create({
         data: {
           aluno_id: parseInt(aluno_id),
           autor_id: req.userId,
           bimestre,
-          avaliacao_pedagogica: pedagogicoParsed || {},
-          avaliacao_psico: psicoParsed || {},
-          fotos: fotosFinais,
+          avaliacao_pedagogica: pedagogicoParsed,
+          avaliacao_psico: psicoParsed,
+          fotos: fotosFinais, // Prisma aceita array JS direto no Json
           observacao,
         },
       });
@@ -147,14 +150,18 @@ export const FeedbackController = {
         fotos_existentes,
       } = req.body;
 
-      const pedagogicoParsed =
-        typeof avaliacao_pedagogica === "string"
-          ? JSON.parse(avaliacao_pedagogica)
-          : avaliacao_pedagogica;
-      const psicoParsed =
-        typeof avaliacao_psico === "string"
-          ? JSON.parse(avaliacao_psico)
-          : avaliacao_psico;
+      let pedagogicoParsed = {};
+      let psicoParsed = {};
+      try {
+        pedagogicoParsed =
+          typeof avaliacao_pedagogica === "string"
+            ? JSON.parse(avaliacao_pedagogica)
+            : avaliacao_pedagogica || {};
+        psicoParsed =
+          typeof avaliacao_psico === "string"
+            ? JSON.parse(avaliacao_psico)
+            : avaliacao_psico || {};
+      } catch (e) {}
 
       const novasFotos =
         req.files?.map(
@@ -163,13 +170,18 @@ export const FeedbackController = {
         ) || [];
 
       let fotosFinais = [...novasFotos];
+
+      // Tratamento de fotos existentes
       if (fotos_existentes) {
-        const existentes =
-          typeof fotos_existentes === "string"
-            ? JSON.parse(fotos_existentes)
-            : fotos_existentes;
-        if (Array.isArray(existentes))
-          fotosFinais = [...existentes, ...fotosFinais];
+        try {
+          const existentes =
+            typeof fotos_existentes === "string"
+              ? JSON.parse(fotos_existentes)
+              : fotos_existentes;
+          if (Array.isArray(existentes)) {
+            fotosFinais = [...existentes, ...fotosFinais];
+          }
+        } catch (e) {}
       }
 
       const atualizado = await prisma.feedbacks.update({
