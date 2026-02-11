@@ -221,7 +221,6 @@ export const StudentController = {
   async atualizar(req, res) {
     const { id } = req.params;
 
-    // Remove campos que não devem ser atualizados diretamente ou que precisam de tratamento especial
     const {
       id: _id,
       criado_em,
@@ -252,34 +251,78 @@ export const StudentController = {
           },
         });
 
-        if (data.plano || email_responsavel) {
-          const vinculo = await tx.responsaveis_alunos.findFirst({
+        // 2. Lógica de Sincronização Premium
+        if (data.plano === "premium" && email_responsavel) {
+          // Verifica se já existe um vínculo
+          const vinculoExistente = await tx.responsaveis_alunos.findFirst({
             where: { aluno_id: parseInt(id) },
-            select: { responsavel_id: true },
+            include: { responsavel: true },
           });
 
-          if (vinculo) {
+          if (vinculoExistente) {
+            // Se já tem usuário, apenas atualiza e-mail e plano
             await tx.users.update({
-              where: { id: vinculo.responsavel_id },
+              where: { id: vinculoExistente.responsavel_id },
               data: {
-                plano: data.plano === "premium" ? "premium" : "basico",
-                email: email_responsavel || undefined,
+                email: email_responsavel,
+                plano: "premium",
+              },
+            });
+          } else {
+            let user = await tx.users.findUnique({
+              where: { email: email_responsavel },
+            });
+
+            if (!user) {
+              const senhaPadrao = data.data_nascimento
+                ? data.data_nascimento.replace(/[^0-9]/g, "").substring(0, 6)
+                : "123456";
+              const salt = await bcrypt.genSalt(10);
+              const senhaHash = await bcrypt.hash(senhaPadrao, salt);
+
+              user = await tx.users.create({
+                data: {
+                  nome: data.responsavel || updated.responsavel,
+                  email: email_responsavel,
+                  senha: senhaHash,
+                  role: "responsavel",
+                  plano: "premium",
+                },
+              });
+            }
+
+            await tx.responsaveis_alunos.create({
+              data: {
+                responsavel_id: user.id,
+                aluno_id: updated.id,
+                parentesco: "Responsável",
               },
             });
           }
+        } else if (data.plano === "basico") {
+          const vinculo = await tx.responsaveis_alunos.findFirst({
+            where: { aluno_id: parseInt(id) },
+          });
+          if (vinculo) {
+            await tx.users.update({
+              where: { id: vinculo.responsavel_id },
+              data: { plano: "basico" },
+            });
+          }
         }
+
         return updated;
       });
 
       res.status(200).json({
-        message: "Aluno atualizado!",
+        message: "Aluno atualizado e acesso sincronizado!",
         student: formatDates(alunoAtualizado),
       });
     } catch (error) {
       console.error("❌ Erro ao atualizar aluno:", error.message);
-      res.status(500).json({
-        error: "Erro ao atualizar aluno no banco.",
-      });
+      res
+        .status(500)
+        .json({ error: "Erro ao atualizar aluno e criar acesso." });
     }
   },
 
