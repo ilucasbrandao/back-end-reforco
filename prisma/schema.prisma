@@ -137,6 +137,7 @@ model users {
   role                String?               @default("responsavel") @db.VarChar(20)
   plano               String?               @default("basico") @db.VarChar(20)
   criado_em           DateTime?             @default(now()) @db.Timestamp(6)
+  ultimo_acesso       DateTime?             @db.Timestamp(6)
   
   feedbacks           feedbacks[]
   responsaveis_alunos responsaveis_alunos[]
