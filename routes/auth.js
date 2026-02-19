@@ -9,7 +9,7 @@ router.post("/login", async (req, res) => {
   try {
     const { email, senha } = req.body;
 
-    if (!email || !senha) {
+    if (!email || !senha || email.trim() === "" || senha.trim() === "") {
       return res
         .status(400)
         .json({ message: "Email e senha são obrigatórios" });
