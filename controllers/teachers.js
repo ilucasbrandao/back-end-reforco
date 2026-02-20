@@ -120,20 +120,28 @@ export const cadastrarProfessor = async (req, res) => {
 export const atualizarProfessor = async (req, res) => {
   try {
     const { id } = req.params;
-    const data = req.body;
+    const {
+      despesas,
+      movimentacoes,
+      id: _id,
+      criado_em,
+      ...camposValidos
+    } = req.body;
 
     const professorAtualizado = await prisma.professores.update({
       where: { id: parseInt(id) },
       data: {
-        ...data,
-        nome: data.nome?.trim(),
-        data_nascimento: data.data_nascimento
-          ? new Date(data.data_nascimento)
+        ...camposValidos,
+        nome: camposValidos.nome?.trim(),
+        data_nascimento: camposValidos.data_nascimento
+          ? new Date(camposValidos.data_nascimento)
           : undefined,
-        data_contratacao: data.data_contratacao
-          ? new Date(data.data_contratacao)
+        data_contratacao: camposValidos.data_contratacao
+          ? new Date(camposValidos.data_contratacao)
           : undefined,
-        salario: data.salario ? parseFloat(data.salario) : undefined,
+        salario: camposValidos.salario
+          ? parseFloat(camposValidos.salario)
+          : undefined,
         atualizado_em: new Date(),
       },
     });
