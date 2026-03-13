@@ -199,7 +199,9 @@ export const StudentController = {
 
           dadosAcesso = {
             email: email_responsavel,
-            msg: "Acesso Premium ativo!",
+            msg: user
+              ? "Novo filho vinculado ao seu perfil!"
+              : "Acesso Premium ativo!",
           };
         }
 
