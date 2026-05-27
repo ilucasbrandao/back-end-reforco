@@ -65,22 +65,25 @@ model despesas {
 }
 
 model feedbacks {
-  id                  Int       @id @default(autoincrement())
-  aluno_id            Int?
-  autor_id            Int?
-  data_aula           DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
-  humor               String?   @db.VarChar(50)
-  conteudo            String?
-  observacao          String?
-  lido_pelos_pais     Boolean?  @default(false)
-  criado_em           DateTime? @default(now()) @db.Timestamp(6)
-  bimestre            String?   @db.VarChar(50)
+  id                   Int       @id @default(autoincrement())
+  aluno_id             Int?
+  autor_id             Int?
+  data_aula            DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
+  humor                String?   @db.VarChar(50)
+  conteudo             String?
+  observacao           String?
+  lido_pelos_pais      Boolean?  @default(false)
+  criado_em            DateTime? @default(now()) @db.Timestamp(6)
+  bimestre             String?   @db.VarChar(50)
+  fotos                Json?     @default("[]")
+
+  parecer_atendimento  String?
+
   avaliacao_pedagogica Json?     @default("{}")
   avaliacao_psico      Json?     @default("{}")
-  fotos               Json?     @default("[]")
   
-  aluno               alunos?   @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  autor               users?    @relation(fields: [autor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aluno                alunos?   @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  autor                users?    @relation(fields: [autor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model professores {
