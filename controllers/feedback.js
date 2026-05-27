@@ -1,9 +1,7 @@
 import prisma from "../prisma.js";
 
 export const FeedbackController = {
-  // ======================================================
   // LISTAR FEEDBACKS POR ALUNO
-  // ======================================================
   async listarPorAluno(req, res) {
     try {
       const { id } = req.params;
@@ -21,6 +19,7 @@ export const FeedbackController = {
         if (!vinculo) {
           return res
             .status(403)
+            .status(403)
             .json({ message: "Acesso negado a este aluno." });
         }
       }
@@ -30,15 +29,15 @@ export const FeedbackController = {
         orderBy: { criado_em: "desc" },
         include: {
           autor: {
-            // Traz o nome do professor que escreveu
             select: { nome: true },
           },
         },
       });
 
-      // O Prisma já retorna JSON como objeto, mas garantimos a normalização
+      // Normalização: Trazemos o parecer_atendimento se houver, mas mantemos os objetos JSON antigos vivos
       const normalizados = feedbacks.map((item) => ({
         ...item,
+        parecer_atendimento: item.parecer_atendimento || null,
         avaliacao_pedagogica: item.avaliacao_pedagogica || {},
         avaliacao_psico: item.avaliacao_psico || {},
         fotos: Array.isArray(item.fotos) ? item.fotos : [],
@@ -52,9 +51,7 @@ export const FeedbackController = {
     }
   },
 
-  // ======================================================
   // CRIAR FEEDBACK (COM IMAGENS)
-  // ======================================================
   async criar(req, res) {
     try {
       if (req.userRole === "responsavel") {
@@ -69,22 +66,27 @@ export const FeedbackController = {
         avaliacao_pedagogica,
         avaliacao_psico,
         observacao,
+        parecer_atendimento,
         fotos_existentes,
       } = req.body;
 
-      // Parsing seguro
+      // Parsing seguro (para não quebrar cadastros que venham incompletos)
       let pedagogicoParsed = {};
       let psicoParsed = {};
 
       try {
-        pedagogicoParsed =
-          typeof avaliacao_pedagogica === "string"
-            ? JSON.parse(avaliacao_pedagogica)
-            : avaliacao_pedagogica || {};
-        psicoParsed =
-          typeof avaliacao_psico === "string"
-            ? JSON.parse(avaliacao_psico)
-            : avaliacao_psico || {};
+        if (avaliacao_pedagogica) {
+          pedagogicoParsed =
+            typeof avaliacao_pedagogica === "string"
+              ? JSON.parse(avaliacao_pedagogica)
+              : avaliacao_pedagogica;
+        }
+        if (avaliacao_psico) {
+          psicoParsed =
+            typeof avaliacao_psico === "string"
+              ? JSON.parse(avaliacao_psico)
+              : avaliacao_psico;
+        }
       } catch (e) {
         return res
           .status(400)
@@ -98,7 +100,6 @@ export const FeedbackController = {
             `${req.protocol}://${req.get("host")}/uploads/feedbacks/imagens/${file.filename}`,
         ) || [];
 
-      // Como é criação, fotos_existentes geralmente é null, mas mantemos a lógica
       let fotosFinais = [...novasFotos];
 
       // Salvar no Banco
@@ -107,9 +108,10 @@ export const FeedbackController = {
           aluno_id: parseInt(aluno_id),
           autor_id: req.userId,
           bimestre,
+          parecer_atendimento: parecer_atendimento || null,
           avaliacao_pedagogica: pedagogicoParsed,
           avaliacao_psico: psicoParsed,
-          fotos: fotosFinais, // Prisma aceita array JS direto no Json
+          fotos: fotosFinais,
           observacao,
         },
       });
@@ -121,9 +123,7 @@ export const FeedbackController = {
     }
   },
 
-  // ======================================================
   // MARCAR COMO LIDO
-  // ======================================================
   async marcarComoLido(req, res) {
     try {
       await prisma.feedbacks.update({
@@ -136,9 +136,7 @@ export const FeedbackController = {
     }
   },
 
-  // ======================================================
   // ATUALIZAR FEEDBACK
-  // ======================================================
   async atualizar(req, res) {
     try {
       const { id } = req.params;
@@ -147,20 +145,25 @@ export const FeedbackController = {
         avaliacao_pedagogica,
         avaliacao_psico,
         observacao,
+        parecer_atendimento,
         fotos_existentes,
       } = req.body;
 
       let pedagogicoParsed = {};
       let psicoParsed = {};
       try {
-        pedagogicoParsed =
-          typeof avaliacao_pedagogica === "string"
-            ? JSON.parse(avaliacao_pedagogica)
-            : avaliacao_pedagogica || {};
-        psicoParsed =
-          typeof avaliacao_psico === "string"
-            ? JSON.parse(avaliacao_psico)
-            : avaliacao_psico || {};
+        if (avaliacao_pedagogica) {
+          pedagogicoParsed =
+            typeof avaliacao_pedagogica === "string"
+              ? JSON.parse(avaliacao_pedagogica)
+              : avaliacao_pedagogica;
+        }
+        if (avaliacao_psico) {
+          psicoParsed =
+            typeof avaliacao_psico === "string"
+              ? JSON.parse(avaliacao_psico)
+              : avaliacao_psico;
+        }
       } catch (e) {}
 
       const novasFotos =
@@ -171,7 +174,6 @@ export const FeedbackController = {
 
       let fotosFinais = [...novasFotos];
 
-      // Tratamento de fotos existentes
       if (fotos_existentes) {
         try {
           const existentes =
@@ -188,6 +190,7 @@ export const FeedbackController = {
         where: { id: parseInt(id) },
         data: {
           bimestre,
+          parecer_atendimento: parecer_atendimento || null,
           avaliacao_pedagogica: pedagogicoParsed,
           avaliacao_psico: psicoParsed,
           observacao,
@@ -202,9 +205,7 @@ export const FeedbackController = {
     }
   },
 
-  // ======================================================
   // EXCLUIR FEEDBACK
-  // ======================================================
   async deletar(req, res) {
     try {
       await prisma.feedbacks.delete({
