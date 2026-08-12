@@ -20,6 +20,7 @@ model alunos {
   criado_em         DateTime? @default(now()) @db.Timestamp(6)
   atualizado_em     DateTime? @default(now()) @db.Timestamp(6)
   turno             String?   @default("tarde") @db.VarChar(20)
+  horario_atendimento String?
   valor_mensalidade Decimal?  @default(150) @db.Decimal(10, 2)
   plano             String?   @default("padrao") @db.VarChar(20)
   foto_url          String?
