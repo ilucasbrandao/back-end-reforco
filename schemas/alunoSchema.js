@@ -16,6 +16,8 @@ export const createAlunoSchema = z
     status: z.enum(["ativo", "inativo"]).default("ativo"),
     plano: z.enum(["padrao", "basico", "premium"]).default("padrao"),
     dia_vencimento: z.union([z.number(), z.string()]).optional().nullable(),
+    horario_atendimento: z.string().optional().nullable(),
+    professor_id: z.union([z.number(), z.string(), z.null()]).optional(),
 
     // SANITIZAÇÃO CRÍTICA DO E-MAIL:
     email_responsavel: z
@@ -40,3 +42,6 @@ export const createAlunoSchema = z
       path: ["email_responsavel"],
     },
   );
+
+// Schema de Atualização (Reaproveita as mesmas regras)
+export const updateAlunoSchema = createAlunoSchema;

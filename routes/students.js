@@ -20,24 +20,34 @@ const uploadAlunoFoto = createUploadMiddleware(
 
 const router = express.Router();
 
-// --- ROTAS ---
+// --- ROTAS DE ALUNOS ---
 
-// 1. Meus Filhos (Responsável)
+// 1. Meus Filhos (Responsável Logado)
 router.get("/meus-filhos", auth, StudentController.listarMeusFilhos);
 
-// 2. Listar Todos (Admin/Prof)
+// 2. Listar Todos os Alunos (Admin/Prof)
 router.get("/", auth, StudentController.listarAlunos);
 
-// 3. Cadastrar (Admin - com validação Zod e sanitização)
-router.post("/", validate(createAlunoSchema), StudentController.cadastrar);
+// 3. Cadastrar Aluno (Admin - Autenticado + Validação Zod)
+router.post(
+  "/",
+  auth,
+  validate(createAlunoSchema),
+  StudentController.cadastrar,
+);
 
-// 4. Detalhes (Admin/Prof/Responsável)
+// 4. Detalhes do Aluno por ID (Admin/Prof/Responsável)
 router.get("/:id", auth, StudentController.getAlunoComMovimentacoes);
 
-// 5. Atualizar Dados (Admin)
-router.put("/:id", auth, StudentController.atualizar);
+// 5. Atualizar Dados do Aluno (Admin - Autenticado + Validação Zod)
+router.put(
+  "/:id",
+  auth,
+  validate(createAlunoSchema),
+  StudentController.atualizar,
+);
 
-// 6. Upload de Foto (Responsável/Admin)
+// 6. Upload de Foto do Aluno (Responsável/Admin)
 router.patch(
   "/:id/foto",
   auth,
@@ -45,7 +55,7 @@ router.patch(
   StudentController.uploadFoto,
 );
 
-// 7. Deletar (Admin)
+// 7. Deletar Aluno (Admin)
 router.delete("/:id", auth, StudentController.deletar);
 
 export default router;

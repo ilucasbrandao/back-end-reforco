@@ -33,11 +33,18 @@ const formatDates = (aluno) => {
 // =========================================================================
 
 export const StudentController = {
-  // 1. Listar todos os alunos
+  // 1. Listar todos os alunos (Incluindo vínculo com Professores)
   async listarAlunos(req, res, next) {
     try {
       const alunos = await prisma.alunos.findMany({
         orderBy: { id: "asc" },
+        include: {
+          professores_alunos: {
+            include: {
+              professor: true,
+            },
+          },
+        },
       });
       return res.status(200).json(alunos.map(formatDates));
     } catch (error) {
@@ -46,7 +53,7 @@ export const StudentController = {
     }
   },
 
-  // 2. Listar filhos do Responsável Logado
+  // 2. Listar filhos do Responsável Logado (Incluindo vínculo com Professores)
   async listarMeusFilhos(req, res, next) {
     try {
       const idResponsavel = req.userId;
@@ -57,6 +64,13 @@ export const StudentController = {
         where: {
           responsaveis_alunos: {
             some: { responsavel_id: idResponsavel },
+          },
+        },
+        include: {
+          professores_alunos: {
+            include: {
+              professor: true,
+            },
           },
         },
       });
@@ -70,7 +84,7 @@ export const StudentController = {
     }
   },
 
-  // 3. Buscar aluno por ID com Movimentações e Responsáveis
+  // 3. Buscar aluno por ID com Movimentações, Responsáveis e Professores
   async getAlunoComMovimentacoes(req, res, next) {
     try {
       const { id } = req.params;
@@ -81,6 +95,9 @@ export const StudentController = {
           receitas: { orderBy: { data_pagamento: "desc" } },
           responsaveis_alunos: {
             include: { responsavel: true },
+          },
+          professores_alunos: {
+            include: { professor: true },
           },
         },
       });
@@ -112,7 +129,7 @@ export const StudentController = {
     }
   },
 
-  // 4. Cadastrar Aluno (Sanitizado com Zod e Senha Corrigida)
+  // 4. Cadastrar Aluno
   async cadastrar(req, res, next) {
     const {
       nome,
@@ -123,11 +140,13 @@ export const StudentController = {
       valor_mensalidade,
       serie,
       turno,
+      horario_atendimento,
       observacao,
       status,
       plano,
       email_responsavel,
       dia_vencimento,
+      professor_id,
     } = req.body;
 
     const cleanEmail = email_responsavel
@@ -142,6 +161,7 @@ export const StudentController = {
 
     try {
       const resultado = await prisma.$transaction(async (tx) => {
+        // A. Criar o Aluno
         const novoAluno = await tx.alunos.create({
           data: {
             nome,
@@ -156,6 +176,7 @@ export const StudentController = {
               : null,
             serie,
             turno,
+            horario_atendimento,
             observacao,
             status: status || "ativo",
             plano: plano || "padrao",
@@ -163,8 +184,18 @@ export const StudentController = {
           },
         });
 
-        let dadosAcesso = null;
+        // B. Criar Vínculo na Tabela Pivô (professores_alunos)
+        if (professor_id) {
+          await tx.professores_alunos.create({
+            data: {
+              professor_id: parseInt(professor_id),
+              aluno_id: novoAluno.id,
+            },
+          });
+        }
 
+        // C. Sincronização de Usuário Premium
+        let dadosAcesso = null;
         if (plano === "premium" && cleanEmail) {
           let user = await tx.users.findUnique({
             where: { email: cleanEmail },
@@ -181,8 +212,6 @@ export const StudentController = {
             }
           } else {
             ehNovoUsuario = true;
-
-            // ✅ Usa a nossa função de senha blindada (AAAAMMDD ou 123456)
             const senhaLimpa = generateDefaultPassword(data_nascimento);
             const senhaHash = await hashPassword(senhaLimpa);
 
@@ -209,7 +238,7 @@ export const StudentController = {
             email: cleanEmail,
             msg: ehNovoUsuario
               ? "Acesso Premium ativo! Utilizador criado."
-              : "Novo filho vinculado ao seu perfil existente!",
+              : "Novo filho vinculado ao perfil existente!",
           };
         }
 
@@ -229,9 +258,10 @@ export const StudentController = {
     }
   },
 
-  // 5. Atualizar Aluno (Com Sincronização do Acesso)
+  // 5. Atualizar Aluno (Com Sincronização de Professor)
   async atualizar(req, res, next) {
     const { id } = req.params;
+    const alunoId = parseInt(id);
 
     const {
       id: _id,
@@ -239,8 +269,10 @@ export const StudentController = {
       atualizado_em,
       receitas,
       responsaveis_alunos,
+      professores_alunos,
       movimentacoes,
       email_responsavel,
+      professor_id,
       ...data
     } = req.body;
 
@@ -250,8 +282,9 @@ export const StudentController = {
 
     try {
       const alunoAtualizado = await prisma.$transaction(async (tx) => {
+        // A. Atualizar dados cadastrais do Aluno
         const updated = await tx.alunos.update({
-          where: { id: parseInt(id) },
+          where: { id: alunoId },
           data: {
             ...data,
             data_nascimento: data.data_nascimento
@@ -267,10 +300,28 @@ export const StudentController = {
           },
         });
 
-        // Lógica de Sincronização Premium
+        // B. Sincronizar o Professor na Tabela Pivô (professores_alunos)
+        if (professor_id !== undefined) {
+          // 1. Remove os vínculos anteriores deste aluno
+          await tx.professores_alunos.deleteMany({
+            where: { aluno_id: alunoId },
+          });
+
+          // 2. Se um novo professor foi selecionado, insere o novo vínculo
+          if (professor_id) {
+            await tx.professores_alunos.create({
+              data: {
+                professor_id: parseInt(professor_id),
+                aluno_id: alunoId,
+              },
+            });
+          }
+        }
+
+        // C. Sincronização do Plano Premium (Usuário do Pai)
         if (data.plano === "premium" && cleanEmail) {
           const vinculoExistente = await tx.responsaveis_alunos.findFirst({
-            where: { aluno_id: parseInt(id) },
+            where: { aluno_id: alunoId },
             include: { responsavel: true },
           });
 
@@ -288,7 +339,6 @@ export const StudentController = {
             });
 
             if (!user) {
-              // ✅ Usa a nossa função de senha centralizada
               const senhaLimpa = generateDefaultPassword(data.data_nascimento);
               const senhaHash = await hashPassword(senhaLimpa);
 
@@ -313,7 +363,7 @@ export const StudentController = {
           }
         } else if (data.plano === "basico") {
           const vinculo = await tx.responsaveis_alunos.findFirst({
-            where: { aluno_id: parseInt(id) },
+            where: { aluno_id: alunoId },
           });
           if (vinculo) {
             await tx.users.update({
@@ -327,14 +377,14 @@ export const StudentController = {
       });
 
       return res.status(200).json({
-        message: "Aluno atualizado e acesso sincronizado!",
+        message: "Aluno atualizado e vínculo do professor sincronizado!",
         student: formatDates(alunoAtualizado),
       });
     } catch (error) {
       console.error("❌ Erro ao atualizar aluno:", error.message);
       return res
         .status(500)
-        .json({ error: "Erro ao atualizar aluno e sincronizar acesso." });
+        .json({ error: "Erro ao atualizar aluno e sincronizar dados." });
     }
   },
 
