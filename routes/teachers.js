@@ -1,5 +1,10 @@
 import express from "express";
-import auth from "../middleware/auth.js"; // Importando para proteger os dados sensíveis (salários)
+import auth from "../middleware/auth.js";
+import { validate } from "../middleware/validate.js";
+import {
+  createProfessorSchema,
+  updateProfessorSchema,
+} from "../schemas/professorSchema.js";
 import {
   listarProfessores,
   listarProfessoresID,
@@ -10,25 +15,14 @@ import {
 
 const router = express.Router();
 
-// Recomendado aplicar o auth para todas as rotas de professores,
-// pois contêm dados sensíveis como CPF, Endereço e Salário.
+// Aplica autenticação JWT em todas as rotas
 router.use(auth);
 
-// --- LISTAGEM ---
-// Listar todos os professores (Geralmente para o Dashboard/Admin)
+// --- ROTAS ADMINISTRATIVAS ---
 router.get("/", listarProfessores);
-
-// Buscar um professor específico + suas movimentações financeiras (Prisma include despesas)
 router.get("/:id", listarProfessoresID);
-
-// --- AÇÕES ---
-// Cadastrar novo professor
-router.post("/", cadastrarProfessor);
-
-// Atualizar dados do professor (Salário, Turno, etc.)
-router.put("/:id", atualizarProfessor);
-
-// Remover professor do sistema
+router.post("/", validate(createProfessorSchema), cadastrarProfessor);
+router.put("/:id", validate(updateProfessorSchema), atualizarProfessor);
 router.delete("/:id", deletarProfessor);
 
 export default router;
