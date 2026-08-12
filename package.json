@@ -8,9 +8,8 @@
     "node": "22.x"
   },
   "scripts": {
-    "build": "npx prisma generate",
-    "start": "node ./api/index.js",
-    "postinstall": "npx prisma generate"
+    "build": "prisma generate",
+    "start": "node ./api/index.js"
   },
   "author": "Lucas Brandao",
   "license": "ISC",
@@ -26,11 +25,11 @@
     "moment": "^2.30.1",
     "multer": "^2.0.2",
     "pg": "^8.16.3",
-    "zod": "^4.3.4"
+    "prisma": "^5.22.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "nodemon": "^3.0.2",
-    "prisma": "^5.22.0"
+    "nodemon": "^3.0.2"
   }
 }
