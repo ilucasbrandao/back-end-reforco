@@ -1,5 +1,5 @@
 import { Router } from "express";
-import prisma from "../prisma.js"; // Import centralizado
+import prisma from "../prisma.ts"; // Import centralizado
 import auth from "../middleware/auth.js";
 
 const router = Router();

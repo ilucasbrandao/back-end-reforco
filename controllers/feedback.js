@@ -1,4 +1,4 @@
-import prisma from "../prisma.js";
+import prisma from "../prisma.ts";
 
 export const FeedbackController = {
   // LISTAR FEEDBACKS POR ALUNO

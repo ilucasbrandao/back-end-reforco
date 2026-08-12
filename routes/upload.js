@@ -9,7 +9,7 @@ export function createUploadRoutes(uploadMiddleware) {
     "/",
     auth,
     uploadMiddleware.array("files", 10),
-    UploadController.uploadImages
+    UploadController.uploadImages,
   );
 
   return router;

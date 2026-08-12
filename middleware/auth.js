@@ -1,5 +1,5 @@
 import { verifyToken } from "../utils/jwt.js";
-import prisma from "../prisma.js"; // 1. NÃO ESQUEÇA DE IMPORTAR O PRISMA AQUI
+import prisma from "../prisma.ts";
 
 const auth = (req, res, next) => {
   const authHeader = req.headers.authorization;

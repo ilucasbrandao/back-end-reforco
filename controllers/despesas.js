@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import prisma from "../prisma.js";
+import prisma from "../prisma.ts";
 // =========================================================================
 // FUNÇÕES AUXILIARES (DATAS)
 // =========================================================================

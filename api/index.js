@@ -1,4 +1,4 @@
-import "../config/env.js"; // Carrega as variáveis de ambiente antes de tudo
+import "../config/env.js";
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";

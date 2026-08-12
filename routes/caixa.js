@@ -1,6 +1,6 @@
 // routes/caixa.js
 import { Router } from "express";
-import prisma from "../prisma.js"; // Importando a instância centralizada
+import prisma from "../prisma.ts"; // Importando a instância centralizada
 import auth from "../middleware/auth.js";
 
 const router = Router();
