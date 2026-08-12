@@ -48,4 +48,4 @@ async function atualizarSenhaPorData(alunoId, dataCorreta) {
 }
 
 // EXECUÇÃO: Coloque o ID do aluno e a DATA CORRETA (AAAA-MM-DD)
-atualizarSenhaPorData(20, "2019-05-13");
+atualizarSenhaPorData(33, "2016-10-27");
