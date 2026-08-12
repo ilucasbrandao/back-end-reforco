@@ -1,9 +1,11 @@
 import express from "express";
+import path from "path";
 import auth from "../middleware/auth.js";
 import { StudentController } from "../controllers/students.js";
-import path from "path";
+import { validate } from "../middleware/validate.js";
+import { createAlunoSchema } from "../schemas/alunoSchema.js";
 import { createUploadMiddleware } from "../middleware/upload.js";
-import { UPLOADS_ROOT } from "../config/uploads.js"; // Importação crucial
+import { UPLOADS_ROOT } from "../config/uploads.js";
 
 // Configuração de Upload para Alunos
 // Caminho Final: .../BACKEND/uploads/alunos/fotos
@@ -18,10 +20,6 @@ const uploadAlunoFoto = createUploadMiddleware(
 
 const router = express.Router();
 
-// Aplica autenticação em todas as rotas (Opcional, mas recomendado)
-// Se quiser deixar listarAlunos público, mova o auth apenas para as rotas específicas
-// router.use(auth);
-
 // --- ROTAS ---
 
 // 1. Meus Filhos (Responsável)
@@ -30,10 +28,10 @@ router.get("/meus-filhos", auth, StudentController.listarMeusFilhos);
 // 2. Listar Todos (Admin/Prof)
 router.get("/", auth, StudentController.listarAlunos);
 
-// 3. Cadastrar (Admin)
-router.post("/", auth, StudentController.cadastrar);
+// 3. Cadastrar (Admin - com validação Zod e sanitização)
+router.post("/", validate(createAlunoSchema), StudentController.cadastrar);
 
-// 4. Detalhes (Admin/Prof/Responsável - validação interna no controller idealmente)
+// 4. Detalhes (Admin/Prof/Responsável)
 router.get("/:id", auth, StudentController.getAlunoComMovimentacoes);
 
 // 5. Atualizar Dados (Admin)
@@ -43,8 +41,8 @@ router.put("/:id", auth, StudentController.atualizar);
 router.patch(
   "/:id/foto",
   auth,
-  uploadAlunoFoto.single("foto"), // Middleware do Multer processa o arquivo
-  StudentController.uploadFoto, // Controller salva a URL no banco
+  uploadAlunoFoto.single("foto"),
+  StudentController.uploadFoto,
 );
 
 // 7. Deletar (Admin)

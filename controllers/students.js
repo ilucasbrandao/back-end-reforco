@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
-import prisma from "../prisma.js";
+import prisma from "../prisma.ts"; // ou "../prisma.js" conforme seu arquivo
+import { generateDefaultPassword, hashPassword } from "../utils/password.js";
 
 // =========================================================================
 // FUNÇÕES AUXILIARES (DATAS)
@@ -28,31 +29,30 @@ const formatDates = (aluno) => {
 };
 
 // =========================================================================
-// CONTROLLERS
+// CONTROLLER
 // =========================================================================
 
 export const StudentController = {
-  // Listar todos os alunos
-  async listarAlunos(req, res) {
+  // 1. Listar todos os alunos
+  async listarAlunos(req, res, next) {
     try {
       const alunos = await prisma.alunos.findMany({
         orderBy: { id: "asc" },
       });
-      res.status(200).json(alunos.map(formatDates));
+      return res.status(200).json(alunos.map(formatDates));
     } catch (error) {
       console.error("❌ Erro ao listar alunos:", error.message);
-      res.status(500).json({ error: "Erro ao buscar alunos" });
+      return res.status(500).json({ error: "Erro ao buscar alunos" });
     }
   },
 
-  // Listar filhos do Responsável Logado
-  async listarMeusFilhos(req, res) {
+  // 2. Listar filhos do Responsável Logado
+  async listarMeusFilhos(req, res, next) {
     try {
       const idResponsavel = req.userId;
       if (!idResponsavel)
         return res.status(401).json({ error: "Não autenticado." });
 
-      // Busca alunos onde EXISTE um vínculo com este responsável
       const alunos = await prisma.alunos.findMany({
         where: {
           responsaveis_alunos: {
@@ -61,15 +61,17 @@ export const StudentController = {
         },
       });
 
-      res.status(200).json(alunos.map(formatDates));
+      return res.status(200).json(alunos.map(formatDates));
     } catch (error) {
       console.error("❌ Erro ao listar meus filhos:", error.message);
-      res.status(500).json({ error: "Erro ao buscar alunos vinculados." });
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar alunos vinculados." });
     }
   },
 
-  // Buscar aluno por ID com Movimentações
-  async getAlunoComMovimentacoes(req, res) {
+  // 3. Buscar aluno por ID com Movimentações e Responsáveis
+  async getAlunoComMovimentacoes(req, res, next) {
     try {
       const { id } = req.params;
 
@@ -91,7 +93,7 @@ export const StudentController = {
       const email_responsavel = vinculo?.responsavel?.email || "";
       const planoAcesso = vinculo?.responsavel?.plano || "basico";
 
-      res.json({
+      return res.json({
         ...formatDates(aluno),
         plano: aluno.plano || planoAcesso,
         email_responsavel,
@@ -106,12 +108,12 @@ export const StudentController = {
       });
     } catch (error) {
       console.error("❌ Erro ao buscar aluno:", error.message);
-      res.status(500).json({ error: "Erro ao buscar aluno" });
+      return res.status(500).json({ error: "Erro ao buscar aluno" });
     }
   },
 
-  // Cadastrar Aluno
-  async cadastrar(req, res) {
+  // 4. Cadastrar Aluno (Sanitizado com Zod e Senha Corrigida)
+  async cadastrar(req, res, next) {
     const {
       nome,
       data_nascimento,
@@ -128,10 +130,14 @@ export const StudentController = {
       dia_vencimento,
     } = req.body;
 
-    if (plano === "premium" && !email_responsavel) {
+    const cleanEmail = email_responsavel
+      ? email_responsavel.trim().toLowerCase()
+      : null;
+
+    if (plano === "premium" && !cleanEmail) {
       return res
         .status(400)
-        .json({ error: "Email obrigatório para plano Premium." });
+        .json({ error: "E-mail obrigatório para plano Premium." });
     }
 
     try {
@@ -153,16 +159,18 @@ export const StudentController = {
             observacao,
             status: status || "ativo",
             plano: plano || "padrao",
-            dia_vencimento,
+            dia_vencimento: dia_vencimento ? String(dia_vencimento) : null,
           },
         });
 
         let dadosAcesso = null;
 
-        if (plano === "premium" && email_responsavel) {
+        if (plano === "premium" && cleanEmail) {
           let user = await tx.users.findUnique({
-            where: { email: email_responsavel },
+            where: { email: cleanEmail },
           });
+
+          let ehNovoUsuario = false;
 
           if (user) {
             if (user.plano !== "premium") {
@@ -172,16 +180,16 @@ export const StudentController = {
               });
             }
           } else {
-            const senhaLimpa = data_nascimento
-              ? data_nascimento.replace(/[^0-9]/g, "")
-              : "123456";
-            const salt = await bcrypt.genSalt(10);
-            const senhaHash = await bcrypt.hash(senhaLimpa, salt);
+            ehNovoUsuario = true;
+
+            // ✅ Usa a nossa função de senha blindada (AAAAMMDD ou 123456)
+            const senhaLimpa = generateDefaultPassword(data_nascimento);
+            const senhaHash = await hashPassword(senhaLimpa);
 
             user = await tx.users.create({
               data: {
-                nome: responsavel,
-                email: email_responsavel,
+                nome: responsavel || "Responsável",
+                email: cleanEmail,
                 senha: senhaHash,
                 role: "responsavel",
                 plano: "premium",
@@ -198,29 +206,31 @@ export const StudentController = {
           });
 
           dadosAcesso = {
-            email: email_responsavel,
-            msg: user
-              ? "Novo filho vinculado ao seu perfil!"
-              : "Acesso Premium ativo!",
+            email: cleanEmail,
+            msg: ehNovoUsuario
+              ? "Acesso Premium ativo! Utilizador criado."
+              : "Novo filho vinculado ao seu perfil existente!",
           };
         }
 
         return { novoAluno, dadosAcesso };
       });
 
-      res.status(201).json({
+      return res.status(201).json({
         message: "Aluno cadastrado com sucesso.",
         student: formatDates(resultado.novoAluno),
         acesso: resultado.dadosAcesso,
       });
     } catch (error) {
-      console.error("❌ Erro ao inserir aluno:", error.message);
-      res.status(500).json({ error: "Erro interno ao cadastrar aluno." });
+      console.error("❌ Erro ao cadastrar aluno:", error.message);
+      return res
+        .status(500)
+        .json({ error: "Erro interno ao cadastrar aluno." });
     }
   },
 
-  // Atualizar Aluno
-  async atualizar(req, res) {
+  // 5. Atualizar Aluno (Com Sincronização do Acesso)
+  async atualizar(req, res, next) {
     const { id } = req.params;
 
     const {
@@ -233,6 +243,10 @@ export const StudentController = {
       email_responsavel,
       ...data
     } = req.body;
+
+    const cleanEmail = email_responsavel
+      ? email_responsavel.trim().toLowerCase()
+      : null;
 
     try {
       const alunoAtualizado = await prisma.$transaction(async (tx) => {
@@ -253,39 +267,35 @@ export const StudentController = {
           },
         });
 
-        // 2. Lógica de Sincronização Premium
-        if (data.plano === "premium" && email_responsavel) {
-          // Verifica se já existe um vínculo
+        // Lógica de Sincronização Premium
+        if (data.plano === "premium" && cleanEmail) {
           const vinculoExistente = await tx.responsaveis_alunos.findFirst({
             where: { aluno_id: parseInt(id) },
             include: { responsavel: true },
           });
 
           if (vinculoExistente) {
-            // Se já tem usuário, apenas atualiza e-mail e plano
             await tx.users.update({
               where: { id: vinculoExistente.responsavel_id },
               data: {
-                email: email_responsavel,
+                email: cleanEmail,
                 plano: "premium",
               },
             });
           } else {
             let user = await tx.users.findUnique({
-              where: { email: email_responsavel },
+              where: { email: cleanEmail },
             });
 
             if (!user) {
-              const senhaPadrao = data.data_nascimento
-                ? data.data_nascimento.replace(/[^0-9]/g, "").substring(0, 6)
-                : "123456";
-              const salt = await bcrypt.genSalt(10);
-              const senhaHash = await bcrypt.hash(senhaPadrao, salt);
+              // ✅ Usa a nossa função de senha centralizada
+              const senhaLimpa = generateDefaultPassword(data.data_nascimento);
+              const senhaHash = await hashPassword(senhaLimpa);
 
               user = await tx.users.create({
                 data: {
                   nome: data.responsavel || updated.responsavel,
-                  email: email_responsavel,
+                  email: cleanEmail,
                   senha: senhaHash,
                   role: "responsavel",
                   plano: "premium",
@@ -316,37 +326,39 @@ export const StudentController = {
         return updated;
       });
 
-      res.status(200).json({
+      return res.status(200).json({
         message: "Aluno atualizado e acesso sincronizado!",
         student: formatDates(alunoAtualizado),
       });
     } catch (error) {
       console.error("❌ Erro ao atualizar aluno:", error.message);
-      res
+      return res
         .status(500)
-        .json({ error: "Erro ao atualizar aluno e criar acesso." });
+        .json({ error: "Erro ao atualizar aluno e sincronizar acesso." });
     }
   },
 
-  // Deletar Aluno
-  async deletar(req, res) {
+  // 6. Deletar Aluno
+  async deletar(req, res, next) {
     try {
       const { id } = req.params;
       const deletado = await prisma.alunos.delete({
         where: { id: parseInt(id) },
       });
-      res.status(200).json({
+      return res.status(200).json({
         message: "Aluno deletado com sucesso",
         student: formatDates(deletado),
       });
     } catch (error) {
       console.error("❌ Erro ao deletar aluno:", error.message);
-      res.status(500).json({ error: "Aluno não encontrado ou erro no banco." });
+      return res
+        .status(500)
+        .json({ error: "Aluno não encontrado ou erro no banco." });
     }
   },
 
-  // Atualizar Foto do Aluno (Usado pelo Pai ou Admin)
-  async uploadFoto(req, res) {
+  // 7. Upload de Foto do Aluno
+  async uploadFoto(req, res, next) {
     try {
       const { id } = req.params;
       const alunoId = parseInt(id);
@@ -355,7 +367,6 @@ export const StudentController = {
         return res.status(400).json({ error: "Nenhuma foto enviada." });
       }
 
-      // Constrói a URL pública
       const fotoUrl = `${req.protocol}://${req.get("host")}/uploads/alunos/fotos/${req.file.filename}`;
 
       const alunoAtualizado = await prisma.alunos.update({
@@ -363,10 +374,10 @@ export const StudentController = {
         data: { foto_url: fotoUrl },
       });
 
-      res.status(200).json(alunoAtualizado);
+      return res.status(200).json(alunoAtualizado);
     } catch (error) {
       console.error("Erro ao atualizar foto:", error);
-      res.status(500).json({ error: "Erro ao salvar foto." });
+      return res.status(500).json({ error: "Erro ao salvar foto." });
     }
   },
 };
