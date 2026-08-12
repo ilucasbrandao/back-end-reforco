@@ -25,12 +25,13 @@ model alunos {
   foto_url          String?
 
   // Adicionado para suportar o fluxo de vencimento do Espaço
-  dia_vencimento    String?   @db.VarChar(2)
+  dia_vencimento String? @db.VarChar(2)
 
   fechamento_mensal   fechamento_mensal[]
   feedbacks           feedbacks[]
   receitas            receitas[]
   responsaveis_alunos responsaveis_alunos[]
+  professores_alunos  professores_alunos[]
 }
 
 model receitas {
@@ -43,9 +44,9 @@ model receitas {
   criado_em      DateTime? @default(now()) @db.Timestamp(6)
   atualizado_em  DateTime? @default(now()) @db.Timestamp(6)
   descricao      String?   @default("Mensalidade") @db.VarChar(255)
-  
+
   // Relacionamento nomeado no singular para facilitar: receita.aluno.nome
-  aluno          alunos    @relation(fields: [id_aluno], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  aluno alunos @relation(fields: [id_aluno], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model despesas {
@@ -60,64 +61,79 @@ model despesas {
   criado_em      DateTime?    @default(now()) @db.Timestamp(6)
   atualizado_em  DateTime?    @default(now()) @db.Timestamp(6)
   descricao      String?      @default("Despesa geral") @db.VarChar(255)
-  
-  professor      professores? @relation(fields: [id_professor], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  professor professores? @relation(fields: [id_professor], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model feedbacks {
-  id                   Int       @id @default(autoincrement())
-  aluno_id             Int?
-  autor_id             Int?
-  data_aula            DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
-  humor                String?   @db.VarChar(50)
-  conteudo             String?
-  observacao           String?
-  lido_pelos_pais      Boolean?  @default(false)
-  criado_em            DateTime? @default(now()) @db.Timestamp(6)
-  bimestre             String?   @db.VarChar(50)
-  fotos                Json?     @default("[]")
+  id                  Int       @id @default(autoincrement())
+  aluno_id            Int?
+  autor_id            Int?
+  data_aula           DateTime? @default(dbgenerated("CURRENT_DATE")) @db.Date
+  humor               String?   @db.VarChar(50)
+  conteudo            String?
+  observacao          String?
+  lido_pelos_pais     Boolean?  @default(false)
+  criado_em           DateTime? @default(now()) @db.Timestamp(6)
+  bimestre            String?   @db.VarChar(50)
+  fotos               Json?     @default("[]")
 
-  parecer_atendimento  String?
+  parecer_atendimento String?
 
-  avaliacao_pedagogica Json?     @default("{}")
-  avaliacao_psico      Json?     @default("{}")
-  
-  aluno                alunos?   @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  autor                users?    @relation(fields: [autor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  avaliacao_pedagogica Json? @default("{}")
+  avaliacao_psico      Json? @default("{}")
+
+  aluno alunos? @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  autor users?  @relation(fields: [autor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model professores {
-  id                Int                 @id @default(autoincrement())
-  nome              String              @db.VarChar(255)
-  data_nascimento   DateTime?           @db.Date
-  telefone          String?             @db.VarChar(20)
-  endereco          String?             @db.VarChar(255)
-  data_contratacao  DateTime?           @db.Date
-  nivel_ensino      String?             @db.VarChar(50)
-  turno             String?             @db.VarChar(20)
-  salario           Decimal?            @db.Decimal(10, 2)
-  status            String?             @default("ativo") @db.VarChar(10)
-  criado_em         DateTime?           @default(now()) @db.Timestamp(6)
-  atualizado_em     DateTime?           @default(now()) @db.Timestamp(6)
-  
-  despesas          despesas[]
-  fechamento_mensal fechamento_mensal[]
+  id               Int       @id @default(autoincrement())
+  user_id          Int?      @unique // Conecta com a tabela de login 'users'
+  nome             String    @db.VarChar(255)
+  data_nascimento  DateTime? @db.Date
+  telefone         String?   @db.VarChar(20)
+  endereco         String?   @db.VarChar(255)
+  data_contratacao DateTime? @db.Date
+  nivel_ensino     String?   @db.VarChar(50)
+  turno            String?   @db.VarChar(20)
+  salario          Decimal?  @db.Decimal(10, 2)
+  status           String?   @default("ativo") @db.VarChar(10)
+  criado_em        DateTime? @default(now()) @db.Timestamp(6)
+  atualizado_em    DateTime? @default(now()) @db.Timestamp(6)
+
+  user               users?               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  despesas           despesas[]
+  fechamento_mensal  fechamento_mensal[]
+  professores_alunos professores_alunos[]
+}
+
+model professores_alunos {
+  id           Int       @id @default(autoincrement())
+  professor_id Int
+  aluno_id     Int
+  criado_em    DateTime? @default(now()) @db.Timestamp(6)
+
+  professor professores @relation(fields: [professor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  aluno     alunos      @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([professor_id, aluno_id])
 }
 
 model fechamento_mensal {
-  id_fechamento   Int          @id @default(autoincrement())
+  id_fechamento   Int       @id @default(autoincrement())
   ano             Int
   mes             Int
-  saldo_final     Decimal      @db.Decimal(12, 2)
+  saldo_final     Decimal   @db.Decimal(12, 2)
   id_professor    Int?
-  nome_professor  String?      @db.VarChar(60)
+  nome_professor  String?   @db.VarChar(60)
   id_aluno        Int?
-  nome_aluno      String?      @db.VarChar(60)
-  usuario         String?      @db.VarChar(50)
-  data_fechamento DateTime?    @default(now()) @db.Timestamp(6)
-  
-  aluno           alunos?      @relation(fields: [id_aluno], references: [id], onUpdate: NoAction)
-  professor       professores? @relation(fields: [id_professor], references: [id], onUpdate: NoAction)
+  nome_aluno      String?   @db.VarChar(60)
+  usuario         String?   @db.VarChar(50)
+  data_fechamento DateTime? @default(now()) @db.Timestamp(6)
+
+  aluno     alunos?      @relation(fields: [id_aluno], references: [id], onUpdate: NoAction)
+  professor professores? @relation(fields: [id_professor], references: [id], onUpdate: NoAction)
 
   @@unique([ano, mes])
 }
@@ -127,21 +143,22 @@ model responsaveis_alunos {
   responsavel_id Int?
   aluno_id       Int?
   parentesco     String? @db.VarChar(50)
-  
-  aluno          alunos? @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  responsavel    users?  @relation(fields: [responsavel_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  aluno       alunos? @relation(fields: [aluno_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  responsavel users?  @relation(fields: [responsavel_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model users {
-  id                  Int                   @id @default(autoincrement())
-  nome                String                @db.VarChar(100)
-  email               String                @unique @db.VarChar(100)
-  senha               String                @db.VarChar(255)
-  role                String?               @default("responsavel") @db.VarChar(20)
-  plano               String?               @default("basico") @db.VarChar(20)
-  criado_em           DateTime?             @default(now()) @db.Timestamp(6)
-  ultimo_acesso       DateTime?             @db.Timestamp(6)
-  
+  id            Int       @id @default(autoincrement())
+  nome          String    @db.VarChar(100)
+  email         String    @unique @db.VarChar(100)
+  senha         String    @db.VarChar(255)
+  role          String?   @default("responsavel") @db.VarChar(20)
+  plano         String?   @default("basico") @db.VarChar(20)
+  criado_em     DateTime? @default(now()) @db.Timestamp(6)
+  ultimo_acesso DateTime? @db.Timestamp(6)
+
   feedbacks           feedbacks[]
   responsaveis_alunos responsaveis_alunos[]
+  professor           professores?
 }
