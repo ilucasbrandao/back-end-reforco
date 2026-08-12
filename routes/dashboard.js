@@ -1,7 +1,7 @@
 import { Router } from "express";
-import prisma from "../prisma.ts"; // Import centralizado
+import prisma from "../prisma.ts";
 import auth from "../middleware/auth.js";
-import { da } from "zod/locales";
+import { z } from "zod";
 
 const router = Router();
 router.use(auth);
@@ -143,7 +143,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       alunos_ativos: alunosAtivos,
-      professores_ativos: professoresAtivos, // Corrigido nome da variável
+      professores_ativos: professoresAtivos,
       alunos_por_turno,
       saldo_caixa,
       aniversariantes: alunosAniv,
