@@ -1,5 +1,5 @@
 import bcrypt from "bcrypt";
-import prisma from "../prisma.ts"; // ou "../prisma.js" conforme seu arquivo
+import prisma from "../prisma.ts";
 import { generateDefaultPassword, hashPassword } from "../utils/password.js";
 
 // =========================================================================
@@ -37,11 +37,12 @@ export const StudentController = {
   async listarAlunos(req, res, next) {
     try {
       const alunos = await prisma.alunos.findMany({
-        orderBy: { id: "asc" },
+        orderBy: { nome: "asc" },
         include: {
           professores_alunos: {
-            include: {
-              professor: true,
+            select: {
+              professor_id: true,
+              professor: { select: { nome: true } },
             },
           },
         },
@@ -50,6 +51,52 @@ export const StudentController = {
     } catch (error) {
       console.error("❌ Erro ao listar alunos:", error.message);
       return res.status(500).json({ error: "Erro ao buscar alunos" });
+    }
+  },
+
+  // 1.b Listar apenas alunos disponíveis (sem professor OU vinculados ao professor informado)
+  async listarAlunosDisponiveis(req, res, next) {
+    try {
+      const { professor_id } = req.query;
+      const profId = professor_id ? Number(professor_id) : null;
+
+      const alunos = await prisma.alunos.findMany({
+        where: {
+          status: "ativo",
+          OR: [
+            {
+              professores_alunos: {
+                none: {},
+              },
+            },
+            ...(profId
+              ? [
+                  {
+                    professores_alunos: {
+                      some: { professor_id: profId },
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        orderBy: { nome: "asc" },
+        include: {
+          professores_alunos: {
+            select: {
+              professor_id: true,
+              professor: { select: { nome: true } },
+            },
+          },
+        },
+      });
+
+      return res.status(200).json(alunos.map(formatDates));
+    } catch (error) {
+      console.error("❌ Erro ao buscar alunos disponíveis:", error.message);
+      return res
+        .status(500)
+        .json({ error: "Erro ao buscar alunos disponíveis." });
     }
   },
 

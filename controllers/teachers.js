@@ -1,4 +1,4 @@
-import prisma from "../prisma.js";
+import prisma from "../prisma.ts";
 import { generateDefaultPassword, hashPassword } from "../utils/password.js";
 
 // Formatação de datas em string ISO (YYYY-MM-DD) sem deslocamento manual de timezone

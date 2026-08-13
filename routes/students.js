@@ -25,10 +25,13 @@ const router = express.Router();
 // 1. Meus Filhos (Responsável Logado)
 router.get("/meus-filhos", auth, StudentController.listarMeusFilhos);
 
-// 2. Listar Todos os Alunos (Admin/Prof)
+// 2. Listar Todos os Alunos
 router.get("/", auth, StudentController.listarAlunos);
 
-// 3. Cadastrar Aluno (Admin - Autenticado + Validação Zod)
+// 🚨 IMPORTANTE: /disponiveis DEVE VIR ANTES DE /:id 🚨
+router.get("/disponiveis", auth, StudentController.listarAlunosDisponiveis);
+
+// 3. Cadastrar Aluno
 router.post(
   "/",
   auth,
@@ -36,10 +39,10 @@ router.post(
   StudentController.cadastrar,
 );
 
-// 4. Detalhes do Aluno por ID (Admin/Prof/Responsável)
+// 4. Detalhes do Aluno por ID (Esta rota captura qualquer texto como id, por isso fica por último)
 router.get("/:id", auth, StudentController.getAlunoComMovimentacoes);
 
-// 5. Atualizar Dados do Aluno (Admin - Autenticado + Validação Zod)
+// 5. Atualizar Dados do Aluno
 router.put(
   "/:id",
   auth,
@@ -47,7 +50,7 @@ router.put(
   StudentController.atualizar,
 );
 
-// 6. Upload de Foto do Aluno (Responsável/Admin)
+// 6. Upload de Foto
 router.patch(
   "/:id/foto",
   auth,
@@ -55,7 +58,7 @@ router.patch(
   StudentController.uploadFoto,
 );
 
-// 7. Deletar Aluno (Admin)
+// 7. Deletar Aluno
 router.delete("/:id", auth, StudentController.deletar);
 
 export default router;
